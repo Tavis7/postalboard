@@ -1,3 +1,3 @@
 #!/bin/bash
 
-go build ./...
+go build ./... && curl "localhost:8080/admin/restart"
