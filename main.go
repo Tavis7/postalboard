@@ -1,23 +1,63 @@
 package main
 
 import (
-	"strings"
-	"mime"
-	"time"
-	"fmt"
-	"log"
-	"net/http"
-	"html"
-	"os"
 	"context"
+	"fmt"
+	"html"
+	"log"
+	"math"
+	"mime"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
+
+func parseAccept(acceptHeader string) ([]struct {
+	mimetype string
+	params   map[string]string
+	q        float32
+}, error) {
+	accepted := make([]struct {
+		mimetype string
+		params   map[string]string
+		q        float32
+	}, 0, 8)
+	acceptHeaderList := strings.Split(acceptHeader, ",")
+	for _, t := range acceptHeaderList {
+		accepting, params, err := mime.ParseMediaType(t)
+		if err != nil {
+			return accepted, err
+		}
+		qString, ok := params["q"]
+		if !ok {
+			qString = "1"
+		}
+		q, err := strconv.ParseFloat(qString, 32)
+		if err != nil {
+			q = 1
+		}
+		q = math.Max(0.0, math.Min(1.0, q))
+		accepted = append(accepted, struct {
+			mimetype string
+			params   map[string]string
+			q        float32
+		}{
+			mimetype: strings.ToLower(accepting),
+			params:   params,
+			q:        float32(q),
+		})
+	}
+	return accepted, nil
+}
 
 func main() {
 	fmt.Println("Starting")
 
-	server := &http.Server {
-		Addr: ":8080",
-		ReadTimeout: 10 * time.Second,
+	server := &http.Server{
+		Addr:         ":8080",
+		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 	exitCode := 0
@@ -25,52 +65,61 @@ func main() {
 	shutdownChan := make(chan struct{})
 
 	http.HandleFunc("GET /app/", func(w http.ResponseWriter, r *http.Request) {
-		mimetypes := make([]struct{t string; params map[string]string}, 0, 8)
-		acceptHeader := r.Header.Get("Accept")
-		acceptHeaderList := strings.Split(acceptHeader, ",")
-		for _, t := range acceptHeaderList {
-			accepting, params, err := mime.ParseMediaType(t)
-			if (err != nil) {
-				fmt.Fprintf(w, "Error: %v\n", err)
-			}
-			mimetypes = append(mimetypes, struct{
-				t string;
-				params map[string]string;
-			} {
-				t : strings.ToLower(accepting),
-				params : params,
-			})
+		acceptedMimeTypes, err := parseAccept(r.Header.Get("Accept"))
+		if err != nil {
+			log.Printf("Error parsing mimetypes: %v", err)
 		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "<html><head></head><body>\n")
+		fmt.Fprintf(w, "<p>Get handler says \"Hello\"</p>\n")
 
-		fmt.Fprintf(w, "Get handler says \"Hello\"\n")
-		fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
-		fmt.Fprintf(w, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
-		fmt.Fprintf(w, "query:\n")
+		fmt.Fprintf(w, "<p>protocol: %q</p>\n", html.EscapeString(r.Proto))
+		fmt.Fprintf(w, "<p>headers:</p>")
+		fmt.Fprintf(w, "<ul>")
+		for header, val := range r.Header {
+			fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
+				html.EscapeString(fmt.Sprintf("%v", header)),
+				html.EscapeString(fmt.Sprintf("%v", val)))
+		}
+		fmt.Fprintf(w, "</ul>")
+		fmt.Fprintf(w, "<p>path: %q</p>\n", html.EscapeString(r.URL.Path))
+		fmt.Fprintf(w, "<p>raw query: <pre style=\"display:inline\">%q</pre></p>\n",
+			html.EscapeString(r.URL.RawQuery))
+		fmt.Fprintf(w, "<p>query:</p>\n")
+		fmt.Fprintf(w, "<ul>\n")
 		for k, v := range r.URL.Query() {
-			fmt.Fprintf(w, "    %v=%v\n", k, v)
+			fmt.Fprintf(w, "<li>\n")
+			fmt.Fprintf(w, "<pre style=\"display:inline\">%v=%v</pre>",
+				html.EscapeString(fmt.Sprintf("%v", k)),
+				html.EscapeString(fmt.Sprintf("%v", v)))
+			fmt.Fprintf(w, "</li>\n")
 		}
-		fmt.Fprintf(w, "accept: %q\n", acceptHeader)
-		fmt.Fprintf(w, "    %q\n", mimetypes)
-		found := false
-		for _, val := range mimetypes {
-			if val.t == "text/html" {
-				fmt.Fprintf(w, "contains text/html: %v\n", val.params)
-				found = true
-				break
-			}
-			if val.t == "text/*" {
-				fmt.Fprintf(w, "contains text/*: %v\n", val.params)
-				found = true
-				break
-			}
-			if val.t == "*/*" {
-				fmt.Fprintf(w, "contains */*: %v\n", val.params)
-				found = true
+		fmt.Fprintf(w, "</ul>\n")
+		fmt.Fprintf(w, "<p>accepted mimetypes:</p>\n")
+		fmt.Fprintf(w, "<ul>")
+		found := -1
+		for i, val := range acceptedMimeTypes {
+			fmt.Fprintf(w, "<li>%v</li>\n", html.EscapeString(fmt.Sprintf("%v", val)))
+			if found == -1 {
+				if val.mimetype == "text/html" ||
+					val.mimetype == "text/*" ||
+					val.mimetype == "*/*" {
+					found = i
+				}
 			}
 		}
-		if !found {
+		fmt.Fprintf(w, "</ul>")
+		fmt.Fprintf(w, "<p>index: %v</p>\n",
+			html.EscapeString(fmt.Sprintf("%v", found)))
+		if found != -1 {
+			fmt.Fprintf(w, "<p>Found: %v</p>\n",
+				html.EscapeString(fmt.Sprintf("%v", acceptedMimeTypes[found])))
+		} else {
 			fmt.Fprintf(w, "does not contain text/html\n")
+			// 406 Not Acceptable
 		}
+		fmt.Fprintf(w, "</body></html>\n")
 	})
 
 	http.HandleFunc("POST /app/", func(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +135,7 @@ func main() {
 		}
 	})
 
-
-	doShutdown := func (code int) {
+	doShutdown := func(code int) {
 		exitCode = code
 		server.Shutdown(context.Background())
 		log.Printf("Shutdown finished")
@@ -110,7 +158,7 @@ func main() {
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
-	<- shutdownChan
+	<-shutdownChan
 	log.Printf("Exiting with code %v", exitCode)
 	os.Exit(exitCode)
 }
