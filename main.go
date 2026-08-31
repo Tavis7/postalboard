@@ -52,8 +52,97 @@ func parseAccept(acceptHeader string) ([]struct {
 	return accepted, nil
 }
 
+func generateDebugAsHTML(r *http.Request) (string, error) {
+	w := &strings.Builder{}
+	acceptedMimeTypes, err := parseAccept(r.Header.Get("Accept"))
+	if err != nil {
+		log.Printf("Error parsing mimetypes: %v", err)
+		fmt.Fprintf(w, "<p>Couldn't parse mimetypes: %v</p>", err)
+	}
+
+	fmt.Fprintf(w, "<p>protocol: %q</p>\n", html.EscapeString(r.Proto))
+	fmt.Fprintf(w, "<p>headers:</p>")
+	fmt.Fprintf(w, "<ul>")
+	for header, val := range r.Header {
+		fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
+			html.EscapeString(fmt.Sprintf("%v", header)),
+			html.EscapeString(fmt.Sprintf("%v", val)))
+	}
+	fmt.Fprintf(w, "</ul>")
+	fmt.Fprintf(w, "<p>path: %q</p>\n", html.EscapeString(r.URL.Path))
+	fmt.Fprintf(w, "<p>raw query: <pre style=\"display:inline\">%q</pre></p>\n",
+		html.EscapeString(r.URL.RawQuery))
+	fmt.Fprintf(w, "<p>query:</p>\n")
+	fmt.Fprintf(w, "<ul>\n")
+	for k, v := range r.URL.Query() {
+		fmt.Fprintf(w, "<li>\n")
+		fmt.Fprintf(w, "<pre style=\"display:inline\">%v=%v</pre>",
+			html.EscapeString(fmt.Sprintf("%v", k)),
+			html.EscapeString(fmt.Sprintf("%v", v)))
+		fmt.Fprintf(w, "</li>\n")
+	}
+	fmt.Fprintf(w, "</ul>\n")
+	fmt.Fprintf(w, "<p>accepted mimetypes:</p>\n")
+	fmt.Fprintf(w, "<ul>")
+	found := -1
+	for i, val := range acceptedMimeTypes {
+		fmt.Fprintf(w, "<li>%v</li>\n", html.EscapeString(fmt.Sprintf("%v", val)))
+		if found == -1 {
+			if val.mimetype == "text/html" ||
+				val.mimetype == "text/*" ||
+				val.mimetype == "*/*" {
+				found = i
+			}
+		}
+	}
+	fmt.Fprintf(w, "</ul>")
+	fmt.Fprintf(w, "<p>index: %v</p>\n",
+		html.EscapeString(fmt.Sprintf("%v", found)))
+	if found != -1 {
+		fmt.Fprintf(w, "<p>Found: %v</p>\n",
+			html.EscapeString(fmt.Sprintf("%v", acceptedMimeTypes[found])))
+	} else {
+		fmt.Fprintf(w, "does not contain text/html\n")
+		// 406 Not Acceptable
+		return "", fmt.Errorf("Accept header does not contain text/html")
+	}
+	return w.String(), nil
+}
+
+type post struct {
+	user string
+	text string
+}
+
+type board struct {
+	children map[string]board
+	posts    []post
+}
+
+var boards map[string]board
+
+func MakeBoard() board {
+	result := board{
+		children: make(map[string]board),
+	}
+	return result
+}
+
 func main() {
 	fmt.Println("Starting")
+
+	boards = make(map[string]board)
+	boards["test-board"] = MakeBoard()
+	testBoard := boards["test-board"]
+	testBoard.posts = append(testBoard.posts, post{
+		user: "me",
+		text: "test post please ignore",
+	})
+	testBoard.posts = append(testBoard.posts, post{
+		user: "you",
+		text: "no",
+	})
+	boards["test-board"] = testBoard
 
 	server := &http.Server{
 		Addr:         ":8080",
@@ -64,65 +153,82 @@ func main() {
 
 	shutdownChan := make(chan struct{})
 
-	http.HandleFunc("GET /app/", func(w http.ResponseWriter, r *http.Request) {
-		acceptedMimeTypes, err := parseAccept(r.Header.Get("Accept"))
-		if err != nil {
-			log.Printf("Error parsing mimetypes: %v", err)
-		}
+	getDebugger := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "<html><head></head><body>\n")
 		fmt.Fprintf(w, "<p>Get handler says \"Hello\"</p>\n")
 
-		fmt.Fprintf(w, "<p>protocol: %q</p>\n", html.EscapeString(r.Proto))
-		fmt.Fprintf(w, "<p>headers:</p>")
-		fmt.Fprintf(w, "<ul>")
-		for header, val := range r.Header {
-			fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
-				html.EscapeString(fmt.Sprintf("%v", header)),
-				html.EscapeString(fmt.Sprintf("%v", val)))
+		fmt.Fprintf(w, "<form method=\"post\">\n")
+		fmt.Fprintf(w, "<div>\n")
+		fmt.Fprintf(w, "<input type=\"text\" name=\"text_input\"/>\n")
+		fmt.Fprintf(w, "</div>\n")
+		fmt.Fprintf(w, "<div>\n")
+		fmt.Fprintf(w, "<input type=\"text\" name=\"text_input\"/>\n")
+		fmt.Fprintf(w, "</div>\n")
+		fmt.Fprintf(w, "<div>\n")
+		fmt.Fprintf(w, "<textarea name=\"text_area\">\n")
+		fmt.Fprintf(w, "</textarea>\n")
+		fmt.Fprintf(w, "</div>\n")
+		fmt.Fprintf(w, "<input type=\"submit\" value=\"Submit\" />\n")
+		fmt.Fprintf(w, "</form>\n")
+
+		debugHTML, err := generateDebugAsHTML(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, debugHTML)
+			fmt.Fprintf(w, "</div>")
 		}
-		fmt.Fprintf(w, "</ul>")
-		fmt.Fprintf(w, "<p>path: %q</p>\n", html.EscapeString(r.URL.Path))
-		fmt.Fprintf(w, "<p>raw query: <pre style=\"display:inline\">%q</pre></p>\n",
-			html.EscapeString(r.URL.RawQuery))
-		fmt.Fprintf(w, "<p>query:</p>\n")
-		fmt.Fprintf(w, "<ul>\n")
-		for k, v := range r.URL.Query() {
-			fmt.Fprintf(w, "<li>\n")
-			fmt.Fprintf(w, "<pre style=\"display:inline\">%v=%v</pre>",
-				html.EscapeString(fmt.Sprintf("%v", k)),
-				html.EscapeString(fmt.Sprintf("%v", v)))
-			fmt.Fprintf(w, "</li>\n")
+
+		fmt.Fprintf(w, "</body></html>\n")
+	}
+
+	httpGetBoard := func(w http.ResponseWriter, r *http.Request) {
+		boardString := strings.TrimSuffix(r.PathValue("board"), "/")
+		currentBoard := board{
+			children: boards,
 		}
-		fmt.Fprintf(w, "</ul>\n")
-		fmt.Fprintf(w, "<p>accepted mimetypes:</p>\n")
-		fmt.Fprintf(w, "<ul>")
-		found := -1
-		for i, val := range acceptedMimeTypes {
-			fmt.Fprintf(w, "<li>%v</li>\n", html.EscapeString(fmt.Sprintf("%v", val)))
-			if found == -1 {
-				if val.mimetype == "text/html" ||
-					val.mimetype == "text/*" ||
-					val.mimetype == "*/*" {
-					found = i
+		sb := &strings.Builder{}
+		if len(boardString) > 0 {
+			boardPath := strings.Split(boardString, "/")
+			for _, s := range boardPath {
+				fmt.Fprintf(sb, "<p>---> %v</p>\n", s)
+				b, ok := currentBoard.children[s]
+				if !ok {
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprintf(w, "<html><head></head><body>\n")
+					fmt.Fprintf(w, "<p>Not found</p>\n")
+					fmt.Fprintf(w, boardString)
+					fmt.Fprintf(w, sb.String())
+					fmt.Fprintf(w, "</body></html>\n")
+					return
 				}
+				currentBoard = b
 			}
 		}
-		fmt.Fprintf(w, "</ul>")
-		fmt.Fprintf(w, "<p>index: %v</p>\n",
-			html.EscapeString(fmt.Sprintf("%v", found)))
-		if found != -1 {
-			fmt.Fprintf(w, "<p>Found: %v</p>\n",
-				html.EscapeString(fmt.Sprintf("%v", acceptedMimeTypes[found])))
-		} else {
-			fmt.Fprintf(w, "does not contain text/html\n")
-			// 406 Not Acceptable
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "<html><head></head><body>\n")
+		fmt.Fprintf(w, sb.String())
+		fmt.Fprintf(w, "<p>Board: %v</p>\n", boardString)
+		fmt.Fprintf(w, "<p>Boards:</p>\n")
+		for key, _ := range currentBoard.children {
+			fmt.Fprintf(w, "<p><a href=%s>%s</a></p>\n", key, key)
+		}
+
+		fmt.Fprintf(w, "<p>Posts: </p>\n")
+		for _, post := range currentBoard.posts {
+			fmt.Fprintf(w, "<p>%v: %v</p>\n", post.user, post.text)
 		}
 		fmt.Fprintf(w, "</body></html>\n")
-	})
+	}
 
-	http.HandleFunc("POST /app/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("GET /app/boards/{board...}", httpGetBoard)
+	http.HandleFunc("GET /app/", getDebugger)
+
+	postDebugger := func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Post handler says \"Hello\"\n")
 		fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
 		fmt.Fprintf(w, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
@@ -133,7 +239,18 @@ func main() {
 				fmt.Fprintf(w, "        %v\n", val)
 			}
 		}
-	})
+
+		err := r.ParseForm()
+		if err != nil {
+			log.Printf("Error parsing form: %v", err)
+		}
+
+		fmt.Fprintf(w, "form values:\n")
+		for key, val := range r.PostForm {
+			fmt.Fprintf(w, "    %v: '%v'\n", key, val)
+		}
+	}
+	http.HandleFunc("POST /app/", postDebugger)
 
 	doShutdown := func(code int) {
 		exitCode = code
