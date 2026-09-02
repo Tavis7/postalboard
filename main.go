@@ -115,24 +115,26 @@ type post struct {
 }
 
 type board struct {
-	children map[string]board
+	children map[string]*board
+	canPost  bool
 	posts    []post
 }
 
-var boards map[string]board
+var boards map[string]*board
 
-func MakeBoard() board {
+func MakeBoard(canPost bool) *board {
 	result := board{
-		children: make(map[string]board),
+		children: make(map[string]*board),
 	}
-	return result
+	result.canPost = canPost
+	return &result
 }
 
 func main() {
 	fmt.Println("Starting")
 
-	boards = make(map[string]board)
-	boards["test-board"] = MakeBoard()
+	boards = make(map[string]*board)
+	boards["test-board"] = MakeBoard(true)
 	testBoard := boards["test-board"]
 	testBoard.posts = append(testBoard.posts, post{
 		user: "me",
@@ -187,7 +189,7 @@ func main() {
 
 	httpGetBoard := func(w http.ResponseWriter, r *http.Request) {
 		boardString := strings.TrimSuffix(r.PathValue("board"), "/")
-		currentBoard := board{
+		currentBoard := &board{
 			children: boards,
 		}
 		sb := &strings.Builder{}
@@ -217,16 +219,22 @@ func main() {
 		for key, _ := range currentBoard.children {
 			fmt.Fprintf(w, "<p><a href=%s>%s</a></p>\n", key, key)
 		}
+		fmt.Fprintf(w, "<p>Can post: %v</p>\n", currentBoard.canPost)
 
-		fmt.Fprintf(w, "<p>Posts: </p>\n")
-		for _, post := range currentBoard.posts {
-			fmt.Fprintf(w, "<p>%v: %v</p>\n", post.user, post.text)
+		if currentBoard.canPost || (len(currentBoard.posts) > 1) {
+			fmt.Fprintf(w, "<p>Posts: </p>\n")
+			for _, post := range currentBoard.posts {
+				fmt.Fprintf(w, "<p>%v: %v</p>\n", post.user, post.text)
+			}
+			fmt.Fprintf(w, "<form method=\"post\">")
+			fmt.Fprintf(w, "<textarea name=\"post\"></textarea>")
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, "<input type=\"submit\" value=\"post\" />")
+			fmt.Fprintf(w, "</div>")
+			fmt.Fprintf(w, "</form>")
 		}
 		fmt.Fprintf(w, "</body></html>\n")
 	}
-
-	http.HandleFunc("GET /app/boards/{board...}", httpGetBoard)
-	http.HandleFunc("GET /app/", getDebugger)
 
 	postDebugger := func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Post handler says \"Hello\"\n")
@@ -250,7 +258,112 @@ func main() {
 			fmt.Fprintf(w, "    %v: '%v'\n", key, val)
 		}
 	}
+
+	postBoardPost := func(w http.ResponseWriter, r *http.Request) {
+		boardString := strings.TrimSuffix(r.PathValue("board"), "/")
+		currentBoard := &board{
+			children: boards,
+		}
+		sb := &strings.Builder{}
+		if len(boardString) > 0 {
+			boardPath := strings.Split(boardString, "/")
+			for _, s := range boardPath {
+				fmt.Fprintf(sb, "<p>---> %v</p>\n", s)
+				b, ok := currentBoard.children[s]
+				if !ok {
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprintf(w, "<html><head></head><body>\n")
+					fmt.Fprintf(w, "<p>Not found</p>\n")
+					fmt.Fprintf(w, boardString)
+					fmt.Fprintf(w, sb.String())
+					fmt.Fprintf(w, "</body></html>\n")
+					return
+				}
+				currentBoard = b
+			}
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "<html><head></head><body>\n")
+		fmt.Fprintf(w, "<h1>Posted</h1>\n")
+
+		fmt.Fprintf(w, "<a href=/app/boards/>Boards</a>\n")
+		fmt.Fprintf(w, "<a href=%v>%v</a>\n",
+			html.EscapeString(r.URL.Path), html.EscapeString(boardString))
+
+		fmt.Fprintf(w, "<div>")
+		fmt.Fprintf(w, "<form method=\"post\" action=\"/admin/restart\">")
+		fmt.Fprintf(w, "<input type=\"submit\" value=\"Restart server\" /a>\n")
+		fmt.Fprintf(w, "</form>")
+		fmt.Fprintf(w, "</div>")
+		err := r.ParseForm()
+		if err != nil {
+			log.Printf("Error parsing form: %v", err)
+		}
+
+		fmt.Fprintf(w, "form values:\n")
+		for key, val := range r.PostForm {
+			fmt.Fprintf(w, "    %v: '%v'\n", key, val)
+		}
+
+		postText, ok := r.PostForm["post"]
+		if !ok || len(postText) != 1 {
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, "No post")
+			fmt.Fprintf(w, "</div>")
+		} else {
+			currentBoard.posts = append(currentBoard.posts, post{
+				user: "whoever",
+				text: postText[0],
+			})
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, "Posted '%v'", postText[0])
+			fmt.Fprintf(w, "</div>")
+		}
+
+		debugHTML, err := generateDebugAsHTML(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, debugHTML)
+			fmt.Fprintf(w, "</div>")
+		}
+
+		fmt.Fprintf(w, "<div>")
+		fmt.Fprintf(w, "<p>path: %q</p>\n", html.EscapeString(r.URL.Path))
+		fmt.Fprintf(w, "</body></html>\n")
+	}
+
+	getHome := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "<html><head></head><body>\n")
+		fmt.Fprintf(w, "<h1>Home</h1>\n")
+
+		fmt.Fprintf(w, "<a href=/app/boards/>Boards</a>\n")
+		fmt.Fprintf(w, "<form method=\"post\" action=\"/admin/restart\">")
+		fmt.Fprintf(w, "<input type=\"submit\" value=\"Restart server\" /a>\n")
+		fmt.Fprintf(w, "</form>")
+
+		debugHTML, err := generateDebugAsHTML(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, debugHTML)
+			fmt.Fprintf(w, "</div>")
+		}
+
+		fmt.Fprintf(w, "</body></html>\n")
+	}
+
+	http.HandleFunc("GET /app/boards/{board...}", httpGetBoard)
+	http.HandleFunc("GET /app/", getDebugger)
+	http.HandleFunc("GET /{$}", getHome)
+
 	http.HandleFunc("POST /app/", postDebugger)
+	http.HandleFunc("POST /app/boards/{board...}", postBoardPost)
 
 	doShutdown := func(code int) {
 		exitCode = code
@@ -259,13 +372,13 @@ func main() {
 		shutdownChan <- struct{}{}
 	}
 
-	http.HandleFunc("/admin/restart", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /admin/restart", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Restart: %q", html.EscapeString(r.URL.Path))
 
 		go doShutdown(2)
 	})
 
-	http.HandleFunc("/admin/kill", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("POST /admin/kill", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Quitting: %q", html.EscapeString(r.URL.Path))
 
 		go doShutdown(1)
