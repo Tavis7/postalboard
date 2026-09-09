@@ -10,12 +10,20 @@ import (
 	"time"
 )
 
+func debugHTMLNode() {
+	testNode := makeHTMLNode("p", attribList{{"class", "something"}, {"id", "foobar"}})
+	fmt.Printf("Testnode: %v, %v\n", testNode, testNode.attributes)
+	testNode.appendChildren(htmlNode{text: "hello "})
+	testSpan := makeHTMLNode("span", nil)
+	testSpan.appendChildren(htmlNode{text: "world"})
+	testNode.appendChildren(testSpan)
+	fmt.Printf(renderHTMLNode(testNode))
+}
+
 func main() {
 	fmt.Println("Starting")
 
-	testNode := makeHtmlNode("p", attribList{{"class", "something"}, {"id", "foobar"}})
-	fmt.Printf("Testnode: %v, %v\n", testNode, testNode.attributes)
-
+	debugHTMLNode()
 	initializeBoards()
 	createBoard("test-board")
 	postMessage("test-board", "me", "test post please ignore")
