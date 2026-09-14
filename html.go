@@ -8,24 +8,35 @@ type htmlNode struct {
 	name           string
 	attributes     [][2]string
 	attributeIndex map[string][]int
-	children       []htmlNode
+	children       []*htmlNode
 	text           string
 }
 
 type attribList [][2]string
 
-func makeHTMLNode(name string, attributes attribList) htmlNode {
+func makeHTMLNode(name string, attributes attribList) *htmlNode {
 	result := htmlNode{}
 	result.name = name
 	result.appendAttributes(attributes...)
-	return result
+	return &result
 }
 
-func (node *htmlNode) appendChildren(children ...htmlNode) {
+func makeHTMLTextNode(text string) *htmlNode {
+	result := htmlNode{}
+	result.text = text
+	return &result
+}
+
+func (node *htmlNode) appendChildren(children ...*htmlNode) {
 	node.children = append(node.children, children...)
 }
 
-func (node *htmlNode) appendAttributes(attributes ...[2]string) {
+func (node *htmlNode) appendChild(child *htmlNode) *htmlNode {
+	node.children = append(node.children, child)
+	return node
+}
+
+func (node *htmlNode) appendAttributes(attributes ...[2]string) *htmlNode {
 	node.attributes = append(node.attributes, attributes...)
 	oldLen := len(node.attributes)
 	if node.attributeIndex == nil {
@@ -34,9 +45,10 @@ func (node *htmlNode) appendAttributes(attributes ...[2]string) {
 	for k, v := range node.attributes[oldLen:] {
 		node.attributeIndex[v[0]] = append(node.attributeIndex[v[0]], k)
 	}
+	return node
 }
 
-func renderHTMLNode(node htmlNode) string {
+func renderHTMLNode(node *htmlNode) string {
 	if len(node.name) == 0 {
 		return node.text
 	} else {
@@ -50,10 +62,9 @@ func renderHTMLNode(node htmlNode) string {
 			text = append(text, attribute[1])
 			text = append(text, "\"")
 		}
-		text = append(text, ">\n")
+		text = append(text, ">")
 		for _, child := range node.children {
 			text = append(text, renderHTMLNode(child))
-			text = append(text, "\n")
 		}
 		// @todo render children
 		text = append(text, "</")

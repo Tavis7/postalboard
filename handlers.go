@@ -153,31 +153,47 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed getting children from %v: %v", boardPath, err)
 	}
 
-	sb := &strings.Builder{}
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "<html><head></head><body>\n")
-	fmt.Fprintf(w, sb.String())
-	//fmt.Fprintf(w, "<p>Board: %v</p>\n", boardString)
-	fmt.Fprintf(w, "<p>Boards:</p>\n")
+
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlHead := makeHTMLNode("head", nil)
+	htmlBody := makeHTMLNode("body", nil)
+
+	htmlRoot.appendChildren(htmlHead, htmlBody)
+
+	htmlBoardList := makeHTMLNode("p", nil)
 	for _, child := range children {
-		fmt.Fprintf(w, "<p><a href=%s>%s</a></p>\n", child, child)
+		htmlBoardList.appendChild(
+			makeHTMLNode("p", nil).appendChild(
+				makeHTMLNode("a", attribList{{"href", child}}).appendChild(
+					makeHTMLTextNode(child))))
 	}
-	//fmt.Fprintf(w, "<p>Can post: %v</p>\n", currentBoard.canPost)
+
+	htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
+		makeHTMLTextNode("Boards:"),
+	))
+
+	htmlBody.appendChild(htmlBoardList)
 
 	if len(posts) > 0 {
-		fmt.Fprintf(w, "<p>Posts: </p>\n")
+		htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
+			makeHTMLTextNode("Posts: "),
+		))
 		for _, post := range posts {
-			fmt.Fprintf(w, "<p>%v: %v</p>\n", post.user, post.text)
+			htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
+				makeHTMLTextNode(fmt.Sprintf("%v: %v", post.user, post.text)),
+			))
 		}
-		fmt.Fprintf(w, "<form method=\"post\">")
-		fmt.Fprintf(w, "<textarea name=\"post\"></textarea>")
-		fmt.Fprintf(w, "<div>")
-		fmt.Fprintf(w, "<input type=\"submit\" value=\"post\" />")
-		fmt.Fprintf(w, "</div>")
-		fmt.Fprintf(w, "</form>")
+		htmlBody.appendChild(
+			makeHTMLNode("form", attribList{{"method", "post"}}).appendChild(
+				makeHTMLNode("textArea", attribList{{"name", "post"}})).appendChild(
+				makeHTMLNode("div", nil).appendChild(
+					makeHTMLNode("input",
+						attribList{{"type", "submit"}, {"value", "post"}}))))
 	}
-	fmt.Fprintf(w, "</body></html>\n")
+
+	fmt.Fprintf(w, "%s", renderHTMLNode(htmlRoot))
 }
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {

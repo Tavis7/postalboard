@@ -13,11 +13,11 @@ import (
 func debugHTMLNode() {
 	testNode := makeHTMLNode("p", attribList{{"class", "something"}, {"id", "foobar"}})
 	fmt.Printf("Testnode: %v, %v\n", testNode, testNode.attributes)
-	testNode.appendChildren(htmlNode{text: "hello "})
+	testNode.appendChildren(&htmlNode{text: "hello "})
 	testSpan := makeHTMLNode("span", nil)
-	testSpan.appendChildren(htmlNode{text: "world"})
+	testSpan.appendChildren(&htmlNode{text: "world"})
 	testNode.appendChildren(testSpan)
-	fmt.Printf(renderHTMLNode(testNode))
+	fmt.Printf("%s\n", renderHTMLNode(testNode))
 }
 
 func main() {
