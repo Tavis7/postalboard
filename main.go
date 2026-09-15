@@ -17,7 +17,13 @@ func debugHTMLNode() {
 	testSpan := makeHTMLNode("span", nil)
 	testSpan.appendChildren(&htmlNode{text: "world"})
 	testNode.appendChildren(testSpan)
-	fmt.Printf("%s\n", renderHTMLNode(testNode))
+	testRoot := makeHTMLNode("html", nil).appendChild(
+		makeHTMLNode("body", nil).appendChild(testNode))
+	rendered, err := renderHTML(*testRoot)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
+	fmt.Printf("%s\n", rendered)
 }
 
 func main() {

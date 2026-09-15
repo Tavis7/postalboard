@@ -1,18 +1,21 @@
 package main
 
 import (
+	"fmt"
+	"html"
 	"strings"
 )
 
+type attribList [][2]string
+
 type htmlNode struct {
 	name           string
-	attributes     [][2]string
+	attributes     attribList
 	attributeIndex map[string][]int
 	children       []*htmlNode
 	text           string
+	raw            bool
 }
-
-type attribList [][2]string
 
 func makeHTMLNode(name string, attributes attribList) *htmlNode {
 	result := htmlNode{}
@@ -48,28 +51,47 @@ func (node *htmlNode) appendAttributes(attributes ...[2]string) *htmlNode {
 	return node
 }
 
-func renderHTMLNode(node *htmlNode) string {
+func renderHTMLNode(node *htmlNode, sb *strings.Builder) error {
 	if len(node.name) == 0 {
-		return node.text
+		if !node.raw {
+			fmt.Fprint(sb, html.EscapeString(node.text))
+			return nil
+		} else {
+			fmt.Fprint(sb, node.text)
+			return nil
+		}
 	} else {
-		text := []string{}
-		text = append(text, "<")
-		text = append(text, node.name)
+		fmt.Fprint(sb, "<")
+		fmt.Fprint(sb, node.name)
 		for _, attribute := range node.attributes {
-			text = append(text, " ")
-			text = append(text, attribute[0])
-			text = append(text, "=\"")
-			text = append(text, attribute[1])
-			text = append(text, "\"")
+			fmt.Fprint(sb, " ")
+			fmt.Fprint(sb, attribute[0])
+			fmt.Fprint(sb, "=\"")
+			fmt.Fprint(sb, attribute[1])
+			fmt.Fprint(sb, "\"")
 		}
-		text = append(text, ">")
+		fmt.Fprint(sb, ">")
 		for _, child := range node.children {
-			text = append(text, renderHTMLNode(child))
+			err := renderHTMLNode(child, sb)
+			if err != nil {
+				return err
+			}
 		}
-		// @todo render children
-		text = append(text, "</")
-		text = append(text, node.name)
-		text = append(text, ">")
-		return strings.Join(text, "")
+		fmt.Fprint(sb, "</")
+		fmt.Fprint(sb, node.name)
+		fmt.Fprint(sb, ">")
+		return nil
 	}
+}
+
+func renderHTML(node htmlNode) (string, error) {
+	if strings.ToLower(node.name) != "html" {
+		return "", fmt.Errorf("renderHTML called with non-<html> node")
+	}
+	var sb strings.Builder
+	fmt.Fprint(&sb, "<!doctype html>\n")
+	err := renderHTMLNode(&node, &sb)
+	result := sb.String()
+
+	return result, err
 }

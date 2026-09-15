@@ -156,10 +156,10 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	htmlRoot := makeHTMLNode("html", nil)
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
+	htmlRoot := makeHTMLNode("html", nil)
 	htmlRoot.appendChildren(htmlHead, htmlBody)
 
 	htmlBoardList := makeHTMLNode("p", nil)
@@ -193,7 +193,13 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 						attribList{{"type", "submit"}, {"value", "post"}}))))
 	}
 
-	fmt.Fprintf(w, "%s", renderHTMLNode(htmlRoot))
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+		return
+	}
+
+	fmt.Fprintf(w, "%s", rendered)
 }
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {
