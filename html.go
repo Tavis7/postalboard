@@ -17,6 +17,9 @@ type htmlNode struct {
 	raw            bool
 }
 
+var blockish map[string]bool
+var void map[string]bool
+
 func makeHTMLNode(name string, attributes attribList) *htmlNode {
 	result := htmlNode{}
 	result.name = name
@@ -66,8 +69,14 @@ func (node *htmlNode) appendAttributes(attributes ...[2]string) *htmlNode {
 	return node
 }
 
-func renderHTMLNode(node *htmlNode, sb *strings.Builder) error {
+func renderHTMLNode(node *htmlNode, sb *strings.Builder, indent int, newlined *bool) error {
 	if len(node.name) == 0 {
+		if *newlined {
+			for _ = range indent {
+				fmt.Fprint(sb, "    ")
+			}
+		}
+		*newlined = false
 		if !node.raw {
 			fmt.Fprint(sb, html.EscapeString(node.text))
 			return nil
@@ -76,6 +85,16 @@ func renderHTMLNode(node *htmlNode, sb *strings.Builder) error {
 			return nil
 		}
 	} else {
+		blocky := blockish[node.name]
+		if blocky && !*newlined {
+			fmt.Fprint(sb, "\n")
+		}
+		if blocky || *newlined {
+			for _ = range indent {
+				fmt.Fprint(sb, "    ")
+			}
+		}
+		*newlined = blocky
 		fmt.Fprint(sb, "<")
 		fmt.Fprint(sb, node.name)
 		for _, attribute := range node.attributes {
@@ -85,27 +104,87 @@ func renderHTMLNode(node *htmlNode, sb *strings.Builder) error {
 			fmt.Fprint(sb, attribute[1])
 			fmt.Fprint(sb, "\"")
 		}
+		voidish := void[node.name]
+		if voidish {
+			if len(node.children) > 0 {
+				return fmt.Errorf("void element has children")
+			}
+			if len(node.text) > 0 {
+				return fmt.Errorf("void element has text")
+			}
+			fmt.Fprint(sb, " /")
+		}
 		fmt.Fprint(sb, ">")
-		for _, child := range node.children {
-			err := renderHTMLNode(child, sb)
-			if err != nil {
-				return err
+		if blocky {
+			fmt.Fprint(sb, "\n")
+		}
+		*newlined = blocky
+		if !voidish {
+			children := false
+			for _, child := range node.children {
+				children = true
+				err := renderHTMLNode(child, sb, indent+1, newlined)
+				if err != nil {
+					return err
+				}
+			}
+			if blocky && !*newlined && children {
+				fmt.Fprint(sb, "\n")
+			}
+			if blocky {
+				for _ = range indent {
+					fmt.Fprint(sb, "    ")
+				}
+			}
+			fmt.Fprint(sb, "</")
+			fmt.Fprint(sb, node.name)
+			fmt.Fprint(sb, ">")
+			if blocky {
+				fmt.Fprint(sb, "\n")
+				*newlined = true
 			}
 		}
-		fmt.Fprint(sb, "</")
-		fmt.Fprint(sb, node.name)
-		fmt.Fprint(sb, ">")
 		return nil
 	}
 }
 
 func renderHTML(node htmlNode) (string, error) {
+	blockish = map[string]bool{
+		"html": true,
+		"head": true,
+		"body": true,
+		"div":  true,
+		"p":    true,
+		"ul":   true,
+		"ol":   true,
+		"li":   true,
+		"form": true,
+	}
+
+	void = map[string]bool{
+		"area":   true,
+		"base":   true,
+		"br":     true,
+		"col":    true,
+		"embed":  true,
+		"hr":     true,
+		"img":    true,
+		"input":  true,
+		"link":   true,
+		"meta":   true,
+		"param":  true,
+		"source": true,
+		"track":  true,
+		"wbr":    true,
+	}
+
 	if strings.ToLower(node.name) != "html" {
 		return "", fmt.Errorf("renderHTML called with non-<html> node")
 	}
 	var sb strings.Builder
 	fmt.Fprint(&sb, "<!doctype html>\n")
-	err := renderHTMLNode(&node, &sb)
+	blocky := true
+	err := renderHTMLNode(&node, &sb, 0, &blocky)
 	result := sb.String()
 
 	return result, err
