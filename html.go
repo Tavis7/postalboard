@@ -24,6 +24,14 @@ func makeHTMLNode(name string, attributes attribList) *htmlNode {
 	return &result
 }
 
+func makeHTMLNode2(name string, attributes attribList, children ...*htmlNode) *htmlNode {
+	result := htmlNode{}
+	result.name = name
+	result.appendAttributes(attributes...)
+	result.appendChildren(children...)
+	return &result
+}
+
 func makeHTMLTextNode(text string) *htmlNode {
 	result := htmlNode{}
 	result.text = text
@@ -37,6 +45,12 @@ func (node *htmlNode) appendChildren(children ...*htmlNode) {
 func (node *htmlNode) appendChild(child *htmlNode) *htmlNode {
 	node.children = append(node.children, child)
 	return node
+}
+
+func (node *htmlNode) appendNode(name string, attribs attribList, children ...*htmlNode) *htmlNode {
+	result := makeHTMLNode(name, attribs)
+	result.appendChildren(children...)
+	return result
 }
 
 func (node *htmlNode) appendAttributes(attributes ...[2]string) *htmlNode {

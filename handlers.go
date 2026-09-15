@@ -49,41 +49,58 @@ func parseAccept(acceptHeader string) ([]struct {
 	return accepted, nil
 }
 
-func generateDebugAsHTML(r *http.Request) (string, error) {
-	w := &strings.Builder{}
+func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
+	result := makeHTMLNode("div", nil)
 	acceptedMimeTypes, err := parseAccept(r.Header.Get("Accept"))
 	if err != nil {
 		log.Printf("Error parsing mimetypes: %v", err)
-		fmt.Fprintf(w, "<p>Couldn't parse mimetypes: %v</p>", err)
+		result.appendChild(
+			makeHTMLNode("p", nil).appendChild(
+				makeHTMLTextNode(fmt.Sprintf("Couldn't parse mimetypes: %v", err))))
 	}
 
-	fmt.Fprintf(w, "<p>protocol: %q</p>\n", html.EscapeString(r.Proto))
-	fmt.Fprintf(w, "<p>headers:</p>")
-	fmt.Fprintf(w, "<ul>")
+	result.appendNode("p", nil, makeHTMLTextNode(fmt.Sprintf("protocol: %q", r.Proto)))
+	result.appendNode("p", nil, makeHTMLTextNode("headers:"))
+	headerListNode := makeHTMLNode("ul", nil)
+	result.appendChild(headerListNode)
 	for header, val := range r.Header {
-		fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
-			html.EscapeString(fmt.Sprintf("%v", header)),
-			html.EscapeString(fmt.Sprintf("%v", val)))
+		headerListNode.appendNode("li", nil, makeHTMLNode2("li", nil, makeHTMLNode2("pre", attribList{{"style", "display:inline"}}, makeHTMLTextNode(fmt.Sprintf("%v: %v", header, val)))))
+		/*
+			fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
+				html.EscapeString(fmt.Sprintf("%v", header)),
+				html.EscapeString(fmt.Sprintf("%v", val)))
+		*/
 	}
-	fmt.Fprintf(w, "</ul>")
-	fmt.Fprintf(w, "<p>path: %q</p>\n", html.EscapeString(r.URL.Path))
-	fmt.Fprintf(w, "<p>raw query: <pre style=\"display:inline\">%q</pre></p>\n",
-		html.EscapeString(r.URL.RawQuery))
-	fmt.Fprintf(w, "<p>query:</p>\n")
-	fmt.Fprintf(w, "<ul>\n")
+
+	result.appendChild(makeHTMLNode2("p", nil,
+		makeHTMLTextNode(fmt.Sprintf("path: %v", r.URL.Path))))
+	result.appendChild(makeHTMLNode2("p", nil,
+		makeHTMLTextNode("Raw query: "),
+		makeHTMLNode2("pre", attribList{{"style", "display:inline"}}, makeHTMLTextNode(r.URL.RawQuery)),
+	))
+	result.appendChild(makeHTMLNode2("p", nil,
+		makeHTMLTextNode("query:")))
+
+	queryListNode := makeHTMLNode("ul", nil)
+	result.appendChild(queryListNode)
+
 	for k, v := range r.URL.Query() {
-		fmt.Fprintf(w, "<li>\n")
-		fmt.Fprintf(w, "<pre style=\"display:inline\">%v=%v</pre>",
-			html.EscapeString(fmt.Sprintf("%v", k)),
-			html.EscapeString(fmt.Sprintf("%v", v)))
-		fmt.Fprintf(w, "</li>\n")
+		queryListNode.appendChild(
+			makeHTMLNode2("li", nil,
+				makeHTMLNode2("pre", attribList{{"style", "display:inline"}},
+					makeHTMLTextNode(fmt.Sprintf("%v=%v", k, v)))))
 	}
-	fmt.Fprintf(w, "</ul>\n")
-	fmt.Fprintf(w, "<p>accepted mimetypes:</p>\n")
-	fmt.Fprintf(w, "<ul>")
+
+	result.appendChild(makeHTMLNode2("p", nil,
+		makeHTMLTextNode("accepted mimetypes:")))
+
+	mimeListNode := makeHTMLNode("ul", nil)
+	result.appendChild(mimeListNode)
+
 	found := -1
 	for i, val := range acceptedMimeTypes {
-		fmt.Fprintf(w, "<li>%v</li>\n", html.EscapeString(fmt.Sprintf("%v", val)))
+		mimeListNode.appendChild(
+			makeHTMLNode2("li", nil, makeHTMLTextNode(fmt.Sprintf("%v", val))))
 		if found == -1 {
 			if val.mimetype == "text/html" ||
 				val.mimetype == "text/*" ||
@@ -92,50 +109,56 @@ func generateDebugAsHTML(r *http.Request) (string, error) {
 			}
 		}
 	}
-	fmt.Fprintf(w, "</ul>")
-	fmt.Fprintf(w, "<p>index: %v</p>\n",
-		html.EscapeString(fmt.Sprintf("%v", found)))
+
+	result.appendChild(makeHTMLNode2("p", nil,
+		makeHTMLTextNode("index: "),
+		makeHTMLTextNode(fmt.Sprintf("%v", found))))
 	if found != -1 {
-		fmt.Fprintf(w, "<p>Found: %v</p>\n",
-			html.EscapeString(fmt.Sprintf("%v", acceptedMimeTypes[found])))
+		result.appendChild(makeHTMLNode2("p", nil,
+			makeHTMLTextNode("Found: "),
+			makeHTMLTextNode(fmt.Sprintf("%v", acceptedMimeTypes[found]))))
 	} else {
-		fmt.Fprintf(w, "does not contain text/html\n")
+		result.appendChild(makeHTMLNode2("p", nil,
+			makeHTMLTextNode("does not contain text/html")))
 		// 406 Not Acceptable
-		return "", fmt.Errorf("Accept header does not contain text/html")
+		return result, fmt.Errorf("Accept header does not contain text/html")
 	}
-	return w.String(), nil
+	return result, nil
 }
 
 func getDebugger(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "<html><head></head><body>\n")
-	fmt.Fprintf(w, "<p>Get handler says \"Hello\"</p>\n")
 
-	fmt.Fprintf(w, "<form method=\"post\">\n")
-	fmt.Fprintf(w, "<div>\n")
-	fmt.Fprintf(w, "<input type=\"text\" name=\"text_input\"/>\n")
-	fmt.Fprintf(w, "</div>\n")
-	fmt.Fprintf(w, "<div>\n")
-	fmt.Fprintf(w, "<input type=\"text\" name=\"text_input\"/>\n")
-	fmt.Fprintf(w, "</div>\n")
-	fmt.Fprintf(w, "<div>\n")
-	fmt.Fprintf(w, "<textarea name=\"text_area\">\n")
-	fmt.Fprintf(w, "</textarea>\n")
-	fmt.Fprintf(w, "</div>\n")
-	fmt.Fprintf(w, "<input type=\"submit\" value=\"Submit\" />\n")
-	fmt.Fprintf(w, "</form>\n")
+	htmlHead := makeHTMLNode("head", nil)
+	htmlBody := makeHTMLNode("body", nil)
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChildren(htmlHead, htmlBody)
 
-	debugHTML, err := generateDebugAsHTML(r)
+	htmlBody.appendChild(makeHTMLNode2("a", attribList{{"href", "boards"}}, makeHTMLTextNode("Boards")))
+
+	htmlBody.appendChild(
+		makeHTMLNode("p", nil).appendChild(
+			makeHTMLTextNode("Get handler says \"Hello\"")))
+
+	htmlForm := makeHTMLNode("form", attribList{{"method", "post"}})
+	htmlBody.appendChild(htmlForm)
+	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("input", attribList{{"type", "text"}, {"name", "text_input"}})))
+	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("input", attribList{{"type", "text"}, {"name", "text_input"}})))
+	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("textArea", attribList{{"name", "text_area"}})))
+	htmlForm.appendChild(makeHTMLNode("input", attribList{{"type", "submit"}, {"value", "Submit"}}))
+
+	debugNode, err := generateDebugAsHTML(r)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	} else {
-		fmt.Fprintf(w, "<div>")
-		fmt.Fprintf(w, debugHTML)
-		fmt.Fprintf(w, "</div>")
+		// @todo
 	}
+	htmlBody.appendChild(debugNode)
 
-	fmt.Fprintf(w, "</body></html>\n")
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+	}
+	fmt.Fprint(w, rendered)
 }
 
 func httpGetBoard(w http.ResponseWriter, r *http.Request) {
@@ -199,7 +222,7 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "%s", rendered)
+	fmt.Fprint(w, rendered)
 }
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {
@@ -272,14 +295,17 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "<input type=\"submit\" value=\"Restart server\" /a>\n")
 	fmt.Fprintf(w, "</form>")
 
-	debugHTML, err := generateDebugAsHTML(r)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	} else {
-		fmt.Fprintf(w, "<div>")
-		fmt.Fprintf(w, debugHTML)
-		fmt.Fprintf(w, "</div>")
-	}
+	/*
+		// @todo
+		debugHTML, err := generateDebugAsHTML(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			fmt.Fprintf(w, "<div>")
+			fmt.Fprintf(w, debugHTML)
+			fmt.Fprintf(w, "</div>")
+		}
+	*/
 
 	fmt.Fprintf(w, "</body></html>\n")
 }
