@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func parseAccept(acceptHeader string) ([]struct {
+func parseAccept(acceptHeader []string) ([]struct {
 	mimetype string
 	params   map[string]string
 	q        float32
@@ -21,7 +21,10 @@ func parseAccept(acceptHeader string) ([]struct {
 		params   map[string]string
 		q        float32
 	}, 0, 8)
-	acceptHeaderList := strings.Split(acceptHeader, ",")
+	var acceptHeaderList []string
+	for _, a := range acceptHeader {
+		acceptHeaderList = append(acceptHeaderList, strings.Split(a, ",")...)
+	}
 	for _, t := range acceptHeaderList {
 		accepting, params, err := mime.ParseMediaType(t)
 		if err != nil {
@@ -51,7 +54,7 @@ func parseAccept(acceptHeader string) ([]struct {
 
 func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	result := makeHTMLNode("div", nil)
-	acceptedMimeTypes, err := parseAccept(r.Header.Get("Accept"))
+	acceptedMimeTypes, err := parseAccept(r.Header.Values("Accept"))
 	if err != nil {
 		log.Printf("Error parsing mimetypes: %v", err)
 		result.appendChild(
@@ -64,20 +67,22 @@ func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	headerListNode := makeHTMLNode("ul", nil)
 	result.appendChild(headerListNode)
 	for header, val := range r.Header {
-		headerListNode.appendNode("li", nil, makeHTMLNode2("li", nil, makeHTMLNode2("pre", attribList{{"style", "display:inline"}}, makeHTMLTextNode(fmt.Sprintf("%v: %v", header, val)))))
-		/*
-			fmt.Fprintf(w, "<li><pre style=\"display:inline\">%v: %v</pre></li>\n",
-				html.EscapeString(fmt.Sprintf("%v", header)),
-				html.EscapeString(fmt.Sprintf("%v", val)))
-		*/
+		for _, s := range val {
+			headerListNode.appendChild(
+				makeHTMLNode2("li", nil,
+					makeHTMLNode2("code", nil,
+						makeHTMLTextNode(fmt.Sprintf("%v: %v", header, s)))))
+		}
 	}
 
 	result.appendChild(makeHTMLNode2("p", nil,
 		makeHTMLTextNode(fmt.Sprintf("path: %v", r.URL.Path))))
-	result.appendChild(makeHTMLNode2("p", nil,
-		makeHTMLTextNode("Raw query: "),
-		makeHTMLNode2("pre", attribList{{"style", "display:inline"}}, makeHTMLTextNode(r.URL.RawQuery)),
-	))
+	result.appendChild(
+		makeHTMLNode2("p", nil,
+			makeHTMLTextNode("Raw query: "),
+			makeHTMLNode2("code", nil,
+				makeHTMLTextNode(r.URL.RawQuery)),
+		))
 	result.appendChild(makeHTMLNode2("p", nil,
 		makeHTMLTextNode("query:")))
 
@@ -87,7 +92,7 @@ func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	for k, v := range r.URL.Query() {
 		queryListNode.appendChild(
 			makeHTMLNode2("li", nil,
-				makeHTMLNode2("pre", attribList{{"style", "display:inline"}},
+				makeHTMLNode2("code", nil,
 					makeHTMLTextNode(fmt.Sprintf("%v=%v", k, v)))))
 	}
 

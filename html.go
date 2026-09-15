@@ -50,6 +50,7 @@ func (node *htmlNode) appendChild(child *htmlNode) *htmlNode {
 func (node *htmlNode) appendNode(name string, attribs attribList, children ...*htmlNode) *htmlNode {
 	result := makeHTMLNode(name, attribs)
 	result.appendChildren(children...)
+	node.appendChild(result)
 	return result
 }
 
