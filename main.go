@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var debugRedirect bool
+
 func debugHTMLNode() {
 	testNode := makeHTMLNode("p", attribList{{"class", "something"}, {"id", "foobar"}})
 	fmt.Printf("Testnode: %v, %v\n", testNode, testNode.attributes)
@@ -27,6 +29,7 @@ func debugHTMLNode() {
 }
 
 func main() {
+	debugRedirect = true
 	fmt.Println("Starting")
 
 	debugHTMLNode()
@@ -71,12 +74,14 @@ func main() {
 	}
 
 	http.HandleFunc("POST /admin/restart", func(w http.ResponseWriter, r *http.Request) {
+		// @todo html
 		fmt.Fprintf(w, "Restart: %q", html.EscapeString(r.URL.Path))
 
 		go doShutdown(2)
 	})
 
 	http.HandleFunc("POST /admin/kill", func(w http.ResponseWriter, r *http.Request) {
+		// @todo html
 		fmt.Fprintf(w, "Quitting: %q", html.EscapeString(r.URL.Path))
 
 		go doShutdown(1)

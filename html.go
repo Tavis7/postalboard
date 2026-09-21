@@ -85,6 +85,7 @@ func renderHTMLNode(node *htmlNode, sb *strings.Builder, indent int, newlined *b
 			return nil
 		}
 	} else {
+		// @todo Turn off indentation for <pre> tags
 		blocky := blockish[node.name]
 		if blocky && !*newlined {
 			fmt.Fprint(sb, "\n")
@@ -99,9 +100,9 @@ func renderHTMLNode(node *htmlNode, sb *strings.Builder, indent int, newlined *b
 		fmt.Fprint(sb, node.name)
 		for _, attribute := range node.attributes {
 			fmt.Fprint(sb, " ")
-			fmt.Fprint(sb, attribute[0])
+			fmt.Fprint(sb, html.EscapeString(attribute[0]))
 			fmt.Fprint(sb, "=\"")
-			fmt.Fprint(sb, attribute[1])
+			fmt.Fprint(sb, html.EscapeString(attribute[1]))
 			fmt.Fprint(sb, "\"")
 		}
 		voidish := void[node.name]

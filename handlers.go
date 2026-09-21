@@ -257,18 +257,24 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 	boardPath := strings.TrimSuffix(r.PathValue("board"), "/")
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("location", r.URL.Path)
-	w.WriteHeader(http.StatusSeeOther)
-	fmt.Fprintf(w, "<html>")
-	fmt.Fprintf(w, "<head>")
-	timeout := 3
-	fmt.Fprintf(w, "<meta http-equiv=\"refresh\" content=\"%v;url=%q\" />",
-		timeout,
-		html.EscapeString(r.URL.Path))
-	fmt.Fprintf(w, "</head>")
-	fmt.Fprintf(w, "<body>\n")
-	fmt.Fprintf(w, "<a href=%v>Continue</a>\n",
-		html.EscapeString(r.URL.Path))
+	if !debugRedirect {
+		w.WriteHeader(http.StatusSeeOther)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 
+	timeout := 3
+	htmlHead := makeHTMLNode2("head", nil,
+		makeHTMLNode("meta",
+			attribList{{"http-equiv", "refresh"},
+				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
+	htmlBody := makeHTMLNode("body", nil)
+
+	htmlBody.appendChild(makeHTMLNode2("a",
+		attribList{{"href", r.URL.Path}},
+		makeHTMLTextNode("Continue")))
+
+	successNode := makeHTMLNode("div", nil)
 	err := r.ParseForm()
 	if err != nil {
 		log.Printf("Error parsing form: %v", err)
@@ -276,41 +282,50 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 
 	postText, ok := r.PostForm["post"]
 	if !ok || len(postText) != 1 {
-		fmt.Fprintf(w, "<div>")
-		fmt.Fprintf(w, "No post")
-		fmt.Fprintf(w, "</div>")
+		successNode.appendChild(makeHTMLTextNode("No post"))
 	} else {
 		postMessage(boardPath, "whoever", postText[0])
-		fmt.Fprintf(w, "<div>")
-		fmt.Fprintf(w, "Posted '%v'", postText[0])
-		fmt.Fprintf(w, "</div>")
+		successNode.appendChild(makeHTMLTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
 	}
 
-	fmt.Fprintf(w, "</body></html>\n")
+	htmlBody.appendChild(successNode)
+
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChild(htmlHead)
+	htmlRoot.appendChild(htmlBody)
+
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+	}
+
+	fmt.Fprintf(w, rendered)
 }
 
 func getHome(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "<html><head></head><body>\n")
-	fmt.Fprintf(w, "<h1>Home</h1>\n")
 
-	fmt.Fprintf(w, "<a href=/app/boards/>Boards</a>\n")
-	fmt.Fprintf(w, "<form method=\"post\" action=\"/admin/restart\">")
-	fmt.Fprintf(w, "<input type=\"submit\" value=\"Restart server\" /a>\n")
-	fmt.Fprintf(w, "</form>")
+	htmlHead := makeHTMLNode("head", nil)
+	htmlBody := makeHTMLNode("body", nil)
+	htmlBody.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Home")))
+	htmlBody.appendChild(makeHTMLNode2("a",
+		attribList{{"href", "/app/boards/"}},
+		makeHTMLTextNode("Boards")))
+	htmlBody.appendChild(makeHTMLNode2("form",
+		attribList{{"method", "post"},
+			{"action", "/admin/restart"}},
+		makeHTMLNode("input",
+			attribList{{"type", "submit"}, {"value", "Restart server"}})))
 
-	/*
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChild(htmlHead)
+	htmlRoot.appendChild(htmlBody)
+
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
 		// @todo
-		debugHTML, err := generateDebugAsHTML(r)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-		} else {
-			fmt.Fprintf(w, "<div>")
-			fmt.Fprintf(w, debugHTML)
-			fmt.Fprintf(w, "</div>")
-		}
-	*/
+	}
 
-	fmt.Fprintf(w, "</body></html>\n")
+	fmt.Fprintf(w, rendered)
 }
