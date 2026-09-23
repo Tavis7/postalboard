@@ -60,10 +60,12 @@ func main() {
 	shutdownChan := make(chan struct{})
 
 	http.HandleFunc("GET /app/boards/{board...}", httpGetBoard)
-	http.HandleFunc("GET /app/", getDebugger)
+	http.HandleFunc("GET /app/login", httpLoginPage)
+	http.HandleFunc("GET /debug", getDebugger)
 	http.HandleFunc("GET /{$}", getHome)
 
-	http.HandleFunc("POST /app/", postDebugger)
+	http.HandleFunc("POST /app", postDebugger)
+	http.HandleFunc("POST /app/login", postLogin)
 	http.HandleFunc("POST /app/boards/{board...}", postBoardPost)
 
 	doShutdown := func(code int) {

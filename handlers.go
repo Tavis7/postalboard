@@ -153,6 +153,9 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("textArea", attribList{{"name", "text_area"}})))
 	htmlForm.appendChild(makeHTMLNode("input", attribList{{"type", "submit"}, {"value", "Submit"}}))
 
+	htmlResetForm := makeHTMLNode("form", attribList{{"method", "post"}, {"action", "/reset-client"}})
+	htmlBody.appendChild(htmlResetForm)
+	htmlResetForm.appendChild(makeHTMLNode("input", attribList{{"type", "submit"}, {"value", "Reset"}}))
 	debugNode, err := generateDebugAsHTML(r)
 	if err != nil {
 		// @todo
@@ -228,6 +231,75 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, rendered)
+}
+
+func httpLoginPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+
+	htmlHead := makeHTMLNode("head", nil)
+	htmlBody := makeHTMLNode("body", nil)
+
+	htmlBody.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Login")))
+	htmlBody.appendChild(
+		makeHTMLNode2("form", attribList{{"method", "post"}},
+			makeHTMLNode2("label", nil,
+				makeHTMLNode2("div", nil,
+					makeHTMLTextNode("username"),
+					makeHTMLNode("input",
+						attribList{{"type", "text"},
+							{"name", "username"}}))),
+			makeHTMLNode2("label", nil,
+				makeHTMLNode2("div", nil,
+					makeHTMLTextNode("password"),
+					makeHTMLNode("input",
+						attribList{{"type", "password"},
+							{"name", "password"}}))),
+			makeHTMLNode("input",
+				attribList{{"type", "submit"},
+					{"value", "login"}})),
+	)
+
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChild(htmlHead)
+	htmlRoot.appendChild(htmlBody)
+
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+	}
+
+	fmt.Fprintf(w, rendered)
+}
+
+func postLogin(w http.ResponseWriter, r *http.Request) {
+	sb := &strings.Builder{}
+	fmt.Fprintf(sb, "Login handler says \"Hello\"\n")
+	fmt.Fprintf(sb, "path: %q\n", html.EscapeString(r.URL.Path))
+	fmt.Fprintf(sb, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
+	fmt.Fprintf(sb, "query:\n")
+	for k, v := range r.URL.Query() {
+		fmt.Fprintf(sb, "    %v: %v\n", k, len(v))
+		for _, val := range v {
+			fmt.Fprintf(sb, "        %v\n", val)
+		}
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		log.Printf("Error parsing form: %v", err)
+	}
+
+	fmt.Fprintf(sb, "form values:\n")
+	for key, val := range r.PostForm {
+		fmt.Fprintf(sb, "    %v: '%v'\n", key, val)
+		if key == "username" {
+			w.Header().Set("Set-Cookie", fmt.Sprintf("username=%s; path=/", val[0]))
+		}
+	}
+
+	fmt.Fprint(w, sb.String())
+
 }
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {
