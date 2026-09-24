@@ -131,8 +131,12 @@ func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	return result, nil
 }
 
-func getPageHeader() *htmlNode {
-	result := makeHTMLNode2("ul", attribList{{"id", "page-header"}}, makeHTMLNode2("li", nil,
+func getPageHeader(pageTitle string) *htmlNode {
+	result := makeHTMLNode("div", attribList{{"id", "page-header"}})
+
+	result.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Site Name")))
+
+	result.appendChild(makeHTMLNode2("ul", nil, makeHTMLNode2("li", nil,
 		makeHTMLNode2("a", attribList{{"href", "/"}}, makeHTMLTextNode("Root"))),
 		makeHTMLNode2("li", nil,
 			makeHTMLNode2("a", attribList{{"href", "/debug"}}, makeHTMLTextNode("Debug"))),
@@ -142,7 +146,10 @@ func getPageHeader() *htmlNode {
 			makeHTMLNode2("a", attribList{{"href", "/app/boards"}}, makeHTMLTextNode("Boards"))),
 		makeHTMLNode2("li", nil,
 			makeHTMLNode2("a", attribList{{"href", "/app/login"}}, makeHTMLTextNode("Login"))),
-	)
+	))
+
+	result.appendChild(makeHTMLNode2("h2", nil, makeHTMLTextNode(pageTitle)))
+
 	return result
 }
 
@@ -153,7 +160,7 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader())
+	htmlBody.appendChild(getPageHeader("Debug"))
 
 	htmlBody.appendChild(
 		makeHTMLNode("p", nil).appendChild(
@@ -206,7 +213,7 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader())
+	htmlBody.appendChild(getPageHeader(boardPath))
 
 	htmlBoardList := makeHTMLNode("p", nil)
 	for _, child := range children {
@@ -258,9 +265,7 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader())
-
-	htmlBody.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Login")))
+	htmlBody.appendChild(getPageHeader("Login"))
 
 	htmlBody.appendChild(
 		makeHTMLNode2("form", attribList{{"method", "post"}},
@@ -363,7 +368,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader())
+	htmlBody.appendChild(getPageHeader("Post"))
 
 	htmlBody.appendChild(makeHTMLNode2("a",
 		attribList{{"href", r.URL.Path}},
@@ -404,9 +409,8 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader())
+	htmlBody.appendChild(getPageHeader("Home"))
 
-	htmlBody.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Home")))
 	htmlBody.appendChild(makeHTMLNode2("a",
 		attribList{{"href", "/app/boards/"}},
 		makeHTMLTextNode("Boards")))
