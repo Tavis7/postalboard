@@ -299,19 +299,32 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 }
 
 func postLogout(w http.ResponseWriter, r *http.Request) {
+	redirectTo := "/app/login"
 	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("location", redirectTo)
 	w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/; max-age=0", ""))
+	if !debugRedirect {
+		w.WriteHeader(http.StatusSeeOther)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 
 	log.Printf("Logout")
 
-	w.WriteHeader(http.StatusOK)
-
-	htmlHead := makeHTMLNode("head", nil)
+	timeout := 3
+	htmlHead := makeHTMLNode2("head", nil,
+		makeHTMLNode("meta",
+			attribList{{"http-equiv", "refresh"},
+				{"content", fmt.Sprintf("%v;url=%v", timeout, redirectTo)}}))
 	htmlBody := makeHTMLNode("body", nil)
 
 	htmlBody.appendChild(getPageHeader("Logout", getUser(r)))
 	// @todo Invalidate server login state
 	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged out")))
+	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Click "),
+		makeHTMLNode2("a", attribList{{"href", redirectTo}},
+			makeHTMLTextNode("here")),
+		makeHTMLTextNode(" to continue")))
 
 	htmlRoot := makeHTMLNode("html", nil)
 	htmlRoot.appendChild(htmlHead)
@@ -380,34 +393,57 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func postLogin(w http.ResponseWriter, r *http.Request) {
-	sb := &strings.Builder{}
-	fmt.Fprintf(sb, "Login handler says \"Hello\"\n")
-	fmt.Fprintf(sb, "path: %q\n", html.EscapeString(r.URL.Path))
-	fmt.Fprintf(sb, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
-	fmt.Fprintf(sb, "query:\n")
-	for k, v := range r.URL.Query() {
-		fmt.Fprintf(sb, "    %v: %v\n", k, len(v))
-		for _, val := range v {
-			fmt.Fprintf(sb, "        %v\n", val)
-		}
-	}
-
 	err := r.ParseForm()
 	if err != nil {
 		log.Printf("Error parsing form: %v", err)
 	}
 
-	fmt.Fprintf(sb, "form values:\n")
+	username := ""
 	for key, val := range r.PostForm {
-		fmt.Fprintf(sb, "    %v: '%v'\n", key, val)
 		if key == "username" {
-			w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/", val[0]))
+			username = val[0]
+			w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/", username))
 			log.Printf("Logged in as %v", val[0])
 		}
 	}
 
-	fmt.Fprint(w, sb.String())
+	redirectTo := "/"
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("location", redirectTo)
+	if !debugRedirect {
+		w.WriteHeader(http.StatusSeeOther)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 
+	log.Printf("Logged In")
+
+	timeout := 3
+	htmlHead := makeHTMLNode2("head", nil,
+		makeHTMLNode("meta",
+			attribList{{"http-equiv", "refresh"},
+				{"content", fmt.Sprintf("%v;url=%v", timeout, redirectTo)}}))
+	htmlBody := makeHTMLNode("body", nil)
+
+	htmlBody.appendChild(getPageHeader("Logged In", username))
+	// @todo Invalidate server login state
+	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged in as "),
+		makeHTMLTextNode(username)))
+	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Click "),
+		makeHTMLNode2("a", attribList{{"href", redirectTo}},
+			makeHTMLTextNode("here")),
+		makeHTMLTextNode(" to continue")))
+
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChild(htmlHead)
+	htmlRoot.appendChild(htmlBody)
+
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+	}
+
+	fmt.Fprintf(w, rendered)
 }
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {
