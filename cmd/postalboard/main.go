@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/tavis7/postalboard/internal/htmlgen"
 	"html"
 	"log"
 	"net/http"
@@ -12,16 +13,18 @@ import (
 
 var debugRedirect bool
 
-func debugHTMLNode() {
-	testNode := makeHTMLNode("p", attribList{{"class", "something"}, {"id", "foobar"}})
-	fmt.Printf("Testnode: %v, %v\n", testNode, testNode.attributes)
-	testNode.appendChildren(&htmlNode{text: "hello "})
-	testSpan := makeHTMLNode("span", nil)
-	testSpan.appendChildren(&htmlNode{text: "world"})
-	testNode.appendChildren(testSpan)
-	testRoot := makeHTMLNode("html", nil).appendChild(
-		makeHTMLNode("body", nil).appendChild(testNode))
-	rendered, err := renderHTML(*testRoot)
+func testHTMLGenerator() {
+	log.Printf("testHMTLGenerator")
+	testNode := htmlgen.MakeNode("p", htmlgen.AttribList{{"class", "something"}, {"id", "foobar"}})
+	testNode.AppendChildren(htmlgen.MakeTextNode("hello "))
+	testSpan := htmlgen.MakeLeafNode("span")
+	testSpan.AppendChildren(htmlgen.MakeTextNode("world"))
+	testNode.AppendChildren(testSpan)
+	log.Printf("testNode: %v\n", testNode)
+	testRoot := htmlgen.MakeNode("html", nil,
+		htmlgen.MakeNode("body", nil, testNode))
+	log.Printf("testRoot: %v\n", testRoot)
+	rendered, err := htmlgen.Render(*testRoot)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
@@ -32,23 +35,11 @@ func main() {
 	debugRedirect = true
 	fmt.Println("Starting")
 
-	debugHTMLNode()
+	testHTMLGenerator()
 	initializeBoards()
 	createBoard("test-board")
 	postMessage("test-board", "me", "test post please ignore")
 	postMessage("test-board", "you", "no")
-	/*
-		testBoard := boards.children["test-board"]
-		testBoard.posts = append(testBoard.posts, post{
-			user: "me",
-			text: "test post please ignore",
-		})
-		testBoard.posts = append(testBoard.posts, post{
-			user: "you",
-			text: "no",
-		})
-		boards.children["test-board"] = testBoard
-	*/
 
 	server := &http.Server{
 		Addr:         ":8080",

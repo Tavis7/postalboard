@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/tavis7/postalboard/internal/htmlgen"
 )
 
 func parseAccept(acceptHeader []string) ([]struct {
@@ -80,60 +82,62 @@ func getUser(r *http.Request) string {
 	return cookies["username"]
 }
 
-func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
-	result := makeHTMLNode("div", nil)
+func generateDebugAsHTML(r *http.Request) (*htmlgen.Node, error) {
+	result := htmlgen.MakeLeafNode("div")
 	acceptedMimeTypes, err := parseAccept(r.Header.Values("Accept"))
 	if err != nil {
 		log.Printf("Error parsing mimetypes: %v", err)
-		result.appendChild(
-			makeHTMLNode("p", nil).appendChild(
-				makeHTMLTextNode(fmt.Sprintf("Couldn't parse mimetypes: %v", err))))
+		result.AppendChildren(
+			htmlgen.MakeNode("p", nil,
+				htmlgen.MakeTextNode(fmt.Sprintf("Couldn't parse mimetypes: %v", err))))
 	}
 
-	result.appendNode("p", nil, makeHTMLTextNode(fmt.Sprintf("protocol: %q", r.Proto)))
-	result.appendNode("p", nil, makeHTMLTextNode("headers:"))
-	headerListNode := makeHTMLNode("ul", nil)
-	result.appendChild(headerListNode)
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode(fmt.Sprintf("protocol: %q", r.Proto))))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("headers:")))
+	headerListNode := htmlgen.MakeLeafNode("ul")
+	result.AppendChildren(headerListNode)
 	for header, val := range r.Header {
 		for _, s := range val {
-			headerListNode.appendChild(
-				makeHTMLNode2("li", nil,
-					makeHTMLNode2("code", nil,
-						makeHTMLTextNode(fmt.Sprintf("%v: %v", header, s)))))
+			headerListNode.AppendChildren(
+				htmlgen.MakeNode("li", nil,
+					htmlgen.MakeNode("code", nil,
+						htmlgen.MakeTextNode(fmt.Sprintf("%v: %v", header, s)))))
 		}
 	}
 
-	result.appendChild(makeHTMLNode2("p", nil,
-		makeHTMLTextNode(fmt.Sprintf("path: %v", r.URL.Path))))
-	result.appendChild(
-		makeHTMLNode2("p", nil,
-			makeHTMLTextNode("Raw query: "),
-			makeHTMLNode2("code", nil,
-				makeHTMLTextNode(r.URL.RawQuery)),
-		))
-	result.appendChild(makeHTMLNode2("p", nil,
-		makeHTMLTextNode("query:")))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode(fmt.Sprintf("path: %v", r.URL.Path))))
+	result.AppendChildren(
+		htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Raw query: "),
+			htmlgen.MakeNode("code", nil,
+				htmlgen.MakeTextNode(r.URL.RawQuery))))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("query:")))
 
-	queryListNode := makeHTMLNode("ul", nil)
-	result.appendChild(queryListNode)
+	queryListNode := htmlgen.MakeNode("ul", nil)
+	result.AppendChildren(queryListNode)
 
 	for k, v := range r.URL.Query() {
-		queryListNode.appendChild(
-			makeHTMLNode2("li", nil,
-				makeHTMLNode2("code", nil,
-					makeHTMLTextNode(fmt.Sprintf("%v=%v", k, v)))))
+		queryListNode.AppendChildren(
+			htmlgen.MakeNode("li", nil,
+				htmlgen.MakeNode("code", nil,
+					htmlgen.MakeTextNode(fmt.Sprintf("%v=%v", k, v)))))
 	}
 
-	result.appendChild(makeHTMLNode2("p", nil,
-		makeHTMLTextNode("accepted mimetypes:")))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("accepted mimetypes:")))
 
-	mimeListNode := makeHTMLNode("ul", nil)
-	result.appendChild(mimeListNode)
+	mimeListNode := htmlgen.MakeNode("ul", nil)
+	result.AppendChildren(mimeListNode)
 
 	found := -1
 	for i, val := range acceptedMimeTypes {
-		mimeListNode.appendChild(
-			makeHTMLNode2("li", nil, makeHTMLTextNode(fmt.Sprintf("%v", val))))
+		mimeListNode.AppendChildren(
+			htmlgen.MakeNode("li", nil,
+				htmlgen.MakeTextNode(fmt.Sprintf("%v", val))))
 		if found == -1 {
 			if val.mimetype == "text/html" ||
 				val.mimetype == "text/*" ||
@@ -143,23 +147,62 @@ func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 		}
 	}
 
-	result.appendChild(makeHTMLNode2("p", nil,
-		makeHTMLTextNode("index: "),
-		makeHTMLTextNode(fmt.Sprintf("%v", found))))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("index: "),
+		htmlgen.MakeTextNode(fmt.Sprintf("%v", found))))
 	if found != -1 {
-		result.appendChild(makeHTMLNode2("p", nil,
-			makeHTMLTextNode("Found: "),
-			makeHTMLTextNode(fmt.Sprintf("%v", acceptedMimeTypes[found]))))
+		result.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Found: "),
+			htmlgen.MakeTextNode(fmt.Sprintf("%v", acceptedMimeTypes[found]))))
 	} else {
-		result.appendChild(makeHTMLNode2("p", nil,
-			makeHTMLTextNode("does not contain text/html")))
+		result.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("does not contain text/html")))
 		// 406 Not Acceptable
 		return result, fmt.Errorf("Accept header does not contain text/html")
 	}
 	return result, nil
 }
 
+func getPageHeader2(pageTitle, user string) *htmlgen.Node {
+	result := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "page-header"}})
+
+	result.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode("Site Name")))
+
+	result.AppendChildren(htmlgen.MakeNode("ul", nil, htmlgen.MakeNode("li", nil,
+		htmlgen.MakeNode("a",
+			htmlgen.AttribList{{"href", "/"}},
+			htmlgen.MakeTextNode("Root"))),
+		htmlgen.MakeNode("li", nil,
+			htmlgen.MakeNode("a",
+				htmlgen.AttribList{{"href", "/debug"}},
+				htmlgen.MakeTextNode("Debug"))),
+		htmlgen.MakeNode("li", nil,
+			htmlgen.MakeNode("a",
+				htmlgen.AttribList{{"href", "/app"}},
+				htmlgen.MakeTextNode("App"))),
+		htmlgen.MakeNode("li", nil,
+			htmlgen.MakeNode("a",
+				htmlgen.AttribList{{"href", "/app/boards"}},
+				htmlgen.MakeTextNode("Boards"))),
+		htmlgen.MakeNode("li", nil,
+			htmlgen.MakeNode("a",
+				htmlgen.AttribList{{"href", "/app/login"}},
+				htmlgen.MakeTextNode("Login"))),
+	))
+	if len(user) > 0 {
+		result.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Logged in as "),
+			htmlgen.MakeTextNode(user)))
+	}
+
+	result.AppendChildren(htmlgen.MakeNode("h2", nil,
+		htmlgen.MakeTextNode(pageTitle)))
+
+	return result
+}
+
 func getPageHeader(pageTitle, user string) *htmlNode {
+	// @todo @delete this function
 	result := makeHTMLNode("div", attribList{{"id", "page-header"}})
 
 	result.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Site Name")))
@@ -188,44 +231,61 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	htmlHead := makeHTMLNode("head", nil)
-	htmlBody := makeHTMLNode("body", nil)
+	htmlHead := htmlgen.MakeLeafNode("head")
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader("Debug", getUser(r)))
+	htmlBody.AppendChildren(getPageHeader2("Debug", getUser(r)))
 
-	htmlBody.appendChild(
-		makeHTMLNode("p", nil).appendChild(
-			makeHTMLTextNode("Get handler says \"Hello\"")))
+	htmlBody.AppendChildren(
+		htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Get handler says \"Hello\"")))
 
-	htmlForm := makeHTMLNode("form", attribList{{"method", "post"}})
-	htmlBody.appendChild(htmlForm)
-	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("input", attribList{{"type", "text"}, {"name", "text_input"}})))
-	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("input", attribList{{"type", "text"}, {"name", "text_input"}})))
-	htmlForm.appendChild(makeHTMLNode("div", nil).appendChild(makeHTMLNode("textArea", attribList{{"name", "text_area"}})))
-	htmlForm.appendChild(makeHTMLNode("input", attribList{{"type", "submit"}, {"value", "Submit"}}))
+	htmlForm := htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}})
+	htmlBody.AppendChildren(htmlForm)
+	htmlForm.AppendChildren(htmlgen.MakeNode("div", nil,
+		htmlgen.MakeNode("input",
+			htmlgen.AttribList{{"type", "text"},
+				{"name", "text_input"}})))
+	htmlForm.AppendChildren(htmlgen.MakeNode("div", nil,
+		htmlgen.MakeNode("input",
+			htmlgen.AttribList{{"type", "text"},
+				{"name", "text_input"}})))
+	htmlForm.AppendChildren(htmlgen.MakeNode("div", nil,
+		htmlgen.MakeNode("textArea",
+			htmlgen.AttribList{{"name", "text_area"}})))
+	htmlForm.AppendChildren(htmlgen.MakeNode("input",
+		htmlgen.AttribList{{"type", "submit"},
+			{"value", "Submit"}}))
 
-	htmlResetForm := makeHTMLNode("form", attribList{{"method", "post"}, {"action", "/reset-client"}})
-	htmlBody.appendChild(htmlResetForm)
-	htmlResetForm.appendChild(makeHTMLNode("input", attribList{{"type", "submit"}, {"value", "Reset"}}))
+	htmlResetForm := htmlgen.MakeNode("form",
+		htmlgen.AttribList{{"method", "post"},
+			{"action", "/reset-client"}})
+	htmlBody.AppendChildren(htmlResetForm)
+	htmlResetForm.AppendChildren(htmlgen.MakeNode("input",
+		htmlgen.AttribList{{"type", "submit"},
+			{"value", "Reset"}}))
 	debugNode, err := generateDebugAsHTML(r)
 	if err != nil {
 		// @todo
 	}
 
 	cookies := parseCookies(r.Header.Values("cookie"))
-	debugNode.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Cookies:")))
-	cookieListNode := makeHTMLNode("ul", nil)
+	debugNode.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("Cookies:")))
+	cookieListNode := htmlgen.MakeLeafNode("ul")
 	for k, v := range cookies {
-		cookieListNode.appendChild(makeHTMLNode2("li", nil, makeHTMLTextNode(k), makeHTMLTextNode(": "), makeHTMLTextNode(v)))
+		cookieListNode.AppendChildren(htmlgen.MakeNode("li", nil,
+			htmlgen.MakeTextNode(k),
+			htmlgen.MakeTextNode(": "),
+			htmlgen.MakeTextNode(v)))
 	}
-	debugNode.appendChild(cookieListNode)
+	debugNode.AppendChildren(cookieListNode)
 
-	htmlBody.appendChild(debugNode)
+	htmlBody.AppendChildren(debugNode)
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChildren(htmlHead, htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
@@ -250,46 +310,45 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	htmlHead := makeHTMLNode("head", nil)
-	htmlBody := makeHTMLNode("body", nil)
+	htmlHead := htmlgen.MakeLeafNode("head")
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader(boardPath, getUser(r)))
+	htmlBody.AppendChildren(getPageHeader2(boardPath, getUser(r)))
 
-	htmlBoardList := makeHTMLNode("p", nil)
-	for _, child := range children {
-		htmlBoardList.appendChild(
-			makeHTMLNode("p", nil).appendChild(
-				makeHTMLNode("a", attribList{{"href", child}}).appendChild(
-					makeHTMLTextNode(child))))
+	if len(children) > 0 {
+		htmlBoardList := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "boardlist"}})
+		for _, child := range children {
+			htmlBoardList.AppendChildren(
+				htmlgen.MakeNode("p", nil,
+					htmlgen.MakeNode("a", htmlgen.AttribList{{"href", child}},
+						htmlgen.MakeTextNode(child))))
+		}
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Boards:")))
+
+		htmlBody.AppendChildren(htmlBoardList)
 	}
-
-	htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
-		makeHTMLTextNode("Boards:"),
-	))
-
-	htmlBody.appendChild(htmlBoardList)
 
 	if len(posts) > 0 {
-		htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
-			makeHTMLTextNode("Posts: "),
-		))
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Posts: ")))
+
 		for _, post := range posts {
-			htmlBody.appendChild(makeHTMLNode("p", nil).appendChild(
-				makeHTMLTextNode(fmt.Sprintf("%v: %v", post.user, post.text)),
-			))
+			htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+				htmlgen.MakeTextNode(fmt.Sprintf("%v: %v", post.user, post.text))))
 		}
-		htmlBody.appendChild(
-			makeHTMLNode("form", attribList{{"method", "post"}}).appendChild(
-				makeHTMLNode("textArea", attribList{{"name", "post"}})).appendChild(
-				makeHTMLNode("div", nil).appendChild(
-					makeHTMLNode("input",
-						attribList{{"type", "submit"}, {"value", "post"}}))))
+
+		htmlBody.AppendChildren(
+			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}},
+				htmlgen.MakeNode("textArea", htmlgen.AttribList{{"name", "post"}}),
+				htmlgen.MakeNode("div", nil,
+					htmlgen.MakeNode("input",
+						htmlgen.AttribList{{"type", "submit"}, {"value", "post"}}))))
 	}
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChildren(htmlHead, htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 		return

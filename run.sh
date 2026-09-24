@@ -3,7 +3,8 @@
 RUNNING=1
 while [ $RUNNING -eq 1 ]
 do
-    [ -e ./postalboard ] || (echo "Buildign..." && go build ./...) || break
+    echo "Building..."
+    go build ./cmd/postalboard || break
     ./postalboard
     STATUS=$?
     if [ $STATUS -ne 2 ]
