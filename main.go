@@ -66,6 +66,7 @@ func main() {
 
 	http.HandleFunc("POST /app", postDebugger)
 	http.HandleFunc("POST /app/login", postLogin)
+	http.HandleFunc("POST /app/logout", postLogout)
 	http.HandleFunc("POST /app/boards/{board...}", postBoardPost)
 
 	doShutdown := func(code int) {

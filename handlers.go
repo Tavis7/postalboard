@@ -52,6 +52,34 @@ func parseAccept(acceptHeader []string) ([]struct {
 	return accepted, nil
 }
 
+func parseCookies(cookieHeader []string) map[string]string {
+	log.Printf("Parsing cookies: %v", cookieHeader)
+	result := map[string]string{}
+	for _, h := range cookieHeader {
+		for _, v := range strings.Split(h, ";") {
+			cookie := strings.SplitN(v, "=", 2)
+			if len(cookie) != 2 {
+				log.Printf("Malformed cookie: %v", v)
+				continue
+			}
+			key := strings.Trim(cookie[0], " ")
+			val := strings.Trim(cookie[1], " ")
+			_, ok := result[key]
+			if ok {
+				log.Printf("Multiple values for cookie: '%v': '%v' -> '%v'",
+					key, result[key], val)
+			}
+			result[key] = val
+		}
+	}
+	return result
+}
+
+func getUser(r *http.Request) string {
+	cookies := parseCookies(r.Header.Values("cookie"))
+	return cookies["username"]
+}
+
 func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	result := makeHTMLNode("div", nil)
 	acceptedMimeTypes, err := parseAccept(r.Header.Values("Accept"))
@@ -131,7 +159,7 @@ func generateDebugAsHTML(r *http.Request) (*htmlNode, error) {
 	return result, nil
 }
 
-func getPageHeader(pageTitle string) *htmlNode {
+func getPageHeader(pageTitle, user string) *htmlNode {
 	result := makeHTMLNode("div", attribList{{"id", "page-header"}})
 
 	result.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Site Name")))
@@ -147,6 +175,9 @@ func getPageHeader(pageTitle string) *htmlNode {
 		makeHTMLNode2("li", nil,
 			makeHTMLNode2("a", attribList{{"href", "/app/login"}}, makeHTMLTextNode("Login"))),
 	))
+	if len(user) > 0 {
+		result.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged in as "), makeHTMLTextNode(user)))
+	}
 
 	result.appendChild(makeHTMLNode2("h2", nil, makeHTMLTextNode(pageTitle)))
 
@@ -160,7 +191,7 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader("Debug"))
+	htmlBody.appendChild(getPageHeader("Debug", getUser(r)))
 
 	htmlBody.appendChild(
 		makeHTMLNode("p", nil).appendChild(
@@ -180,6 +211,15 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// @todo
 	}
+
+	cookies := parseCookies(r.Header.Values("cookie"))
+	debugNode.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Cookies:")))
+	cookieListNode := makeHTMLNode("ul", nil)
+	for k, v := range cookies {
+		cookieListNode.appendChild(makeHTMLNode2("li", nil, makeHTMLTextNode(k), makeHTMLTextNode(": "), makeHTMLTextNode(v)))
+	}
+	debugNode.appendChild(cookieListNode)
+
 	htmlBody.appendChild(debugNode)
 
 	htmlRoot := makeHTMLNode("html", nil)
@@ -213,7 +253,7 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader(boardPath))
+	htmlBody.appendChild(getPageHeader(boardPath, getUser(r)))
 
 	htmlBoardList := makeHTMLNode("p", nil)
 	for _, child := range children {
@@ -258,6 +298,33 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
+func postLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/; max-age=0", ""))
+
+	log.Printf("Logout")
+
+	w.WriteHeader(http.StatusOK)
+
+	htmlHead := makeHTMLNode("head", nil)
+	htmlBody := makeHTMLNode("body", nil)
+
+	htmlBody.appendChild(getPageHeader("Logout", getUser(r)))
+	// @todo Invalidate server login state
+	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged out")))
+
+	htmlRoot := makeHTMLNode("html", nil)
+	htmlRoot.appendChild(htmlHead)
+	htmlRoot.appendChild(htmlBody)
+
+	rendered, err := renderHTML(*htmlRoot)
+	if err != nil {
+		// @todo
+	}
+
+	fmt.Fprintf(w, rendered)
+}
+
 func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
@@ -265,26 +332,40 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader("Login"))
+	user := getUser(r)
+	htmlBody.appendChild(getPageHeader("Login", user))
 
-	htmlBody.appendChild(
-		makeHTMLNode2("form", attribList{{"method", "post"}},
-			makeHTMLNode2("label", nil,
-				makeHTMLNode2("div", nil,
-					makeHTMLTextNode("username"),
+	if len(user) != 0 {
+		htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Already logged in as "), makeHTMLTextNode(user)))
+		htmlBody.appendChild(
+			makeHTMLNode2("form", attribList{{"method", "post"}, {"action", "/app/logout"}},
+				makeHTMLNode2("p", nil,
 					makeHTMLNode("input",
-						attribList{{"type", "text"},
-							{"name", "username"}}))),
-			makeHTMLNode2("label", attribList{{ /* @todo */ "style", "display:none"}},
-				makeHTMLNode2("div", nil,
-					makeHTMLTextNode("password"),
-					makeHTMLNode("input",
-						attribList{{"type", "password"},
-							{"name", "password"}}))),
-			makeHTMLNode("input",
-				attribList{{"type", "submit"},
-					{"value", "login"}})),
-	)
+						attribList{
+							{"type", "submit"},
+							{"value", "Log out"},
+						},
+					))))
+	} else {
+		htmlBody.appendChild(
+			makeHTMLNode2("form", attribList{{"method", "post"}},
+				makeHTMLNode2("label", nil,
+					makeHTMLNode2("div", nil,
+						makeHTMLTextNode("username"),
+						makeHTMLNode("input",
+							attribList{{"type", "text"},
+								{"name", "username"}}))),
+				makeHTMLNode2("label", attribList{{ /* @todo */ "style", "display:none"}},
+					makeHTMLNode2("div", nil,
+						makeHTMLTextNode("password"),
+						makeHTMLNode("input",
+							attribList{{"type", "password"},
+								{"name", "password"}}))),
+				makeHTMLNode("input",
+					attribList{{"type", "submit"},
+						{"value", "login"}})),
+		)
+	}
 
 	htmlRoot := makeHTMLNode("html", nil)
 	htmlRoot.appendChild(htmlHead)
@@ -320,7 +401,8 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	for key, val := range r.PostForm {
 		fmt.Fprintf(sb, "    %v: '%v'\n", key, val)
 		if key == "username" {
-			w.Header().Set("Set-Cookie", fmt.Sprintf("username=%s; path=/", val[0]))
+			w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/", val[0]))
+			log.Printf("Logged in as %v", val[0])
 		}
 	}
 
@@ -368,7 +450,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader("Post"))
+	htmlBody.appendChild(getPageHeader("Post", getUser(r)))
 
 	htmlBody.appendChild(makeHTMLNode2("a",
 		attribList{{"href", r.URL.Path}},
@@ -409,7 +491,7 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 	htmlHead := makeHTMLNode("head", nil)
 	htmlBody := makeHTMLNode("body", nil)
 
-	htmlBody.appendChild(getPageHeader("Home"))
+	htmlBody.appendChild(getPageHeader("Home", getUser(r)))
 
 	htmlBody.appendChild(makeHTMLNode2("a",
 		attribList{{"href", "/app/boards/"}},
