@@ -287,7 +287,8 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.AppendChildren(getPageHeader(boardPath, getUser(r)))
+	username := getUser(r)
+	htmlBody.AppendChildren(getPageHeader(boardPath, username))
 
 	if len(children) > 0 {
 		htmlBoardList := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "boardlist"}})
@@ -312,12 +313,20 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 				htmlgen.MakeTextNode(fmt.Sprintf("%v: %v", post.user, post.text))))
 		}
 
-		htmlBody.AppendChildren(
-			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}},
-				htmlgen.MakeNode("textArea", htmlgen.AttribList{{"name", "post"}}),
-				htmlgen.MakeNode("div", nil,
-					htmlgen.MakeNode("input",
-						htmlgen.AttribList{{"type", "submit"}, {"value", "post"}}))))
+		if len(username) > 0 {
+			htmlBody.AppendChildren(
+				htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}},
+					htmlgen.MakeNode("textArea", htmlgen.AttribList{{"name", "post"}}),
+					htmlgen.MakeNode("div", nil,
+						htmlgen.MakeNode("input",
+							htmlgen.AttribList{{"type", "submit"}, {"value", "post"}}))))
+		} else {
+			htmlBody.AppendChildren(
+				htmlgen.MakeNode("p", nil,
+					htmlgen.MakeNode("a", htmlgen.AttribList{{"href", "/app/login"}},
+						htmlgen.MakeTextNode("Log in")),
+					htmlgen.MakeTextNode(" to post")))
+		}
 	}
 
 	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
@@ -515,7 +524,8 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.AppendChildren(getPageHeader("Post", getUser(r)))
+	username := getUser(r)
+	htmlBody.AppendChildren(getPageHeader("Post", username))
 
 	htmlBody.AppendChildren(htmlgen.MakeNode("a",
 		htmlgen.AttribList{{"href", r.URL.Path}},
@@ -531,7 +541,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 	if !ok || len(postText) != 1 {
 		successNode.AppendChildren(htmlgen.MakeTextNode("No post"))
 	} else {
-		postMessage(boardPath, "whoever", postText[0])
+		postMessage(boardPath, username, postText[0])
 		successNode.AppendChildren(htmlgen.MakeTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
 	}
 
