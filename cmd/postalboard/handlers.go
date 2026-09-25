@@ -163,7 +163,7 @@ func generateDebugAsHTML(r *http.Request) (*htmlgen.Node, error) {
 	return result, nil
 }
 
-func getPageHeader2(pageTitle, user string) *htmlgen.Node {
+func getPageHeader(pageTitle, user string) *htmlgen.Node {
 	result := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "page-header"}})
 
 	result.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode("Site Name")))
@@ -201,32 +201,6 @@ func getPageHeader2(pageTitle, user string) *htmlgen.Node {
 	return result
 }
 
-func getPageHeader(pageTitle, user string) *htmlNode {
-	// @todo @delete this function
-	result := makeHTMLNode("div", attribList{{"id", "page-header"}})
-
-	result.appendChild(makeHTMLNode2("h1", nil, makeHTMLTextNode("Site Name")))
-
-	result.appendChild(makeHTMLNode2("ul", nil, makeHTMLNode2("li", nil,
-		makeHTMLNode2("a", attribList{{"href", "/"}}, makeHTMLTextNode("Root"))),
-		makeHTMLNode2("li", nil,
-			makeHTMLNode2("a", attribList{{"href", "/debug"}}, makeHTMLTextNode("Debug"))),
-		makeHTMLNode2("li", nil,
-			makeHTMLNode2("a", attribList{{"href", "/app"}}, makeHTMLTextNode("App"))),
-		makeHTMLNode2("li", nil,
-			makeHTMLNode2("a", attribList{{"href", "/app/boards"}}, makeHTMLTextNode("Boards"))),
-		makeHTMLNode2("li", nil,
-			makeHTMLNode2("a", attribList{{"href", "/app/login"}}, makeHTMLTextNode("Login"))),
-	))
-	if len(user) > 0 {
-		result.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged in as "), makeHTMLTextNode(user)))
-	}
-
-	result.appendChild(makeHTMLNode2("h2", nil, makeHTMLTextNode(pageTitle)))
-
-	return result
-}
-
 func getDebugger(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
@@ -234,7 +208,7 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.AppendChildren(getPageHeader2("Debug", getUser(r)))
+	htmlBody.AppendChildren(getPageHeader("Debug", getUser(r)))
 
 	htmlBody.AppendChildren(
 		htmlgen.MakeNode("p", nil,
@@ -313,7 +287,7 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.AppendChildren(getPageHeader2(boardPath, getUser(r)))
+	htmlBody.AppendChildren(getPageHeader(boardPath, getUser(r)))
 
 	if len(children) > 0 {
 		htmlBoardList := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "boardlist"}})
@@ -371,25 +345,23 @@ func postLogout(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Logout")
 
 	timeout := 3
-	htmlHead := makeHTMLNode2("head", nil,
-		makeHTMLNode("meta",
-			attribList{{"http-equiv", "refresh"},
+	htmlHead := htmlgen.MakeNode("head", nil,
+		htmlgen.MakeNode("meta",
+			htmlgen.AttribList{{"http-equiv", "refresh"},
 				{"content", fmt.Sprintf("%v;url=%v", timeout, redirectTo)}}))
-	htmlBody := makeHTMLNode("body", nil)
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader("Logout", getUser(r)))
+	htmlBody.AppendChildren(getPageHeader("Logout", getUser(r)))
 	// @todo Invalidate server login state
-	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged out")))
-	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Click "),
-		makeHTMLNode2("a", attribList{{"href", redirectTo}},
-			makeHTMLTextNode("here")),
-		makeHTMLTextNode(" to continue")))
+	htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Logged out")))
+	htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Click "),
+		htmlgen.MakeNode("a", htmlgen.AttribList{{"href", redirectTo}},
+			htmlgen.MakeTextNode("here")),
+		htmlgen.MakeTextNode(" to continue")))
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChild(htmlHead)
-	htmlRoot.appendChild(htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
@@ -401,49 +373,47 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	htmlHead := makeHTMLNode("head", nil)
-	htmlBody := makeHTMLNode("body", nil)
+	htmlHead := htmlgen.MakeLeafNode("head")
+	htmlBody := htmlgen.MakeLeafNode("body")
 
 	user := getUser(r)
-	htmlBody.appendChild(getPageHeader("Login", user))
+	htmlBody.AppendChildren(getPageHeader("Login", user))
 
 	if len(user) != 0 {
-		htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Already logged in as "), makeHTMLTextNode(user)))
-		htmlBody.appendChild(
-			makeHTMLNode2("form", attribList{{"method", "post"}, {"action", "/app/logout"}},
-				makeHTMLNode2("p", nil,
-					makeHTMLNode("input",
-						attribList{
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Already logged in as "), htmlgen.MakeTextNode(user)))
+		htmlBody.AppendChildren(
+			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}, {"action", "/app/logout"}},
+				htmlgen.MakeNode("p", nil,
+					htmlgen.MakeNode("input",
+						htmlgen.AttribList{
 							{"type", "submit"},
 							{"value", "Log out"},
 						},
 					))))
 	} else {
-		htmlBody.appendChild(
-			makeHTMLNode2("form", attribList{{"method", "post"}},
-				makeHTMLNode2("label", nil,
-					makeHTMLNode2("div", nil,
-						makeHTMLTextNode("username"),
-						makeHTMLNode("input",
-							attribList{{"type", "text"},
+		htmlBody.AppendChildren(
+			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}},
+				htmlgen.MakeNode("label", nil,
+					htmlgen.MakeNode("div", nil,
+						htmlgen.MakeTextNode("username"),
+						htmlgen.MakeNode("input",
+							htmlgen.AttribList{{"type", "text"},
 								{"name", "username"}}))),
-				makeHTMLNode2("label", attribList{{ /* @todo */ "style", "display:none"}},
-					makeHTMLNode2("div", nil,
-						makeHTMLTextNode("password"),
-						makeHTMLNode("input",
-							attribList{{"type", "password"},
+				htmlgen.MakeNode("label", htmlgen.AttribList{{ /* @todo */ "style", "display:none"}},
+					htmlgen.MakeNode("div", nil,
+						htmlgen.MakeTextNode("password"),
+						htmlgen.MakeNode("input",
+							htmlgen.AttribList{{"type", "password"},
 								{"name", "password"}}))),
-				makeHTMLNode("input",
-					attribList{{"type", "submit"},
+				htmlgen.MakeNode("input",
+					htmlgen.AttribList{{"type", "submit"},
 						{"value", "login"}})),
 		)
 	}
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChild(htmlHead)
-	htmlRoot.appendChild(htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
@@ -478,26 +448,26 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Logged In")
 
 	timeout := 3
-	htmlHead := makeHTMLNode2("head", nil,
-		makeHTMLNode("meta",
-			attribList{{"http-equiv", "refresh"},
+	htmlHead := htmlgen.MakeNode("head", nil,
+		htmlgen.MakeNode("meta",
+			htmlgen.AttribList{{"http-equiv", "refresh"},
 				{"content", fmt.Sprintf("%v;url=%v", timeout, redirectTo)}}))
-	htmlBody := makeHTMLNode("body", nil)
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader("Logged In", username))
+	htmlBody.AppendChildren(getPageHeader("Logged In", username))
 	// @todo Invalidate server login state
-	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Logged in as "),
-		makeHTMLTextNode(username)))
-	htmlBody.appendChild(makeHTMLNode2("p", nil, makeHTMLTextNode("Click "),
-		makeHTMLNode2("a", attribList{{"href", redirectTo}},
-			makeHTMLTextNode("here")),
-		makeHTMLTextNode(" to continue")))
+	htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("Logged in as "),
+		htmlgen.MakeTextNode(username)))
+	htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode("Click "),
+		htmlgen.MakeNode("a", htmlgen.AttribList{{"href", redirectTo}},
+			htmlgen.MakeTextNode("here")),
+		htmlgen.MakeTextNode(" to continue")))
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChild(htmlHead)
-	htmlRoot.appendChild(htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
@@ -539,19 +509,19 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timeout := 3
-	htmlHead := makeHTMLNode2("head", nil,
-		makeHTMLNode("meta",
-			attribList{{"http-equiv", "refresh"},
+	htmlHead := htmlgen.MakeNode("head", nil,
+		htmlgen.MakeNode("meta",
+			htmlgen.AttribList{{"http-equiv", "refresh"},
 				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
-	htmlBody := makeHTMLNode("body", nil)
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader("Post", getUser(r)))
+	htmlBody.AppendChildren(getPageHeader("Post", getUser(r)))
 
-	htmlBody.appendChild(makeHTMLNode2("a",
-		attribList{{"href", r.URL.Path}},
-		makeHTMLTextNode("Continue")))
+	htmlBody.AppendChildren(htmlgen.MakeNode("a",
+		htmlgen.AttribList{{"href", r.URL.Path}},
+		htmlgen.MakeTextNode("Continue")))
 
-	successNode := makeHTMLNode("div", nil)
+	successNode := htmlgen.MakeLeafNode("div")
 	err := r.ParseForm()
 	if err != nil {
 		log.Printf("Error parsing form: %v", err)
@@ -559,19 +529,17 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 
 	postText, ok := r.PostForm["post"]
 	if !ok || len(postText) != 1 {
-		successNode.appendChild(makeHTMLTextNode("No post"))
+		successNode.AppendChildren(htmlgen.MakeTextNode("No post"))
 	} else {
 		postMessage(boardPath, "whoever", postText[0])
-		successNode.appendChild(makeHTMLTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
+		successNode.AppendChildren(htmlgen.MakeTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
 	}
 
-	htmlBody.appendChild(successNode)
+	htmlBody.AppendChildren(successNode)
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChild(htmlHead)
-	htmlRoot.appendChild(htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
@@ -583,25 +551,23 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
-	htmlHead := makeHTMLNode("head", nil)
-	htmlBody := makeHTMLNode("body", nil)
+	htmlHead := htmlgen.MakeLeafNode("head")
+	htmlBody := htmlgen.MakeLeafNode("body")
 
-	htmlBody.appendChild(getPageHeader("Home", getUser(r)))
+	htmlBody.AppendChildren(getPageHeader("Home", getUser(r)))
 
-	htmlBody.appendChild(makeHTMLNode2("a",
-		attribList{{"href", "/app/boards/"}},
-		makeHTMLTextNode("Boards")))
-	htmlBody.appendChild(makeHTMLNode2("form",
-		attribList{{"method", "post"},
+	htmlBody.AppendChildren(htmlgen.MakeNode("a",
+		htmlgen.AttribList{{"href", "/app/boards/"}},
+		htmlgen.MakeTextNode("Boards")))
+	htmlBody.AppendChildren(htmlgen.MakeNode("form",
+		htmlgen.AttribList{{"method", "post"},
 			{"action", "/admin/restart"}},
-		makeHTMLNode("input",
-			attribList{{"type", "submit"}, {"value", "Restart server"}})))
+		htmlgen.MakeNode("input",
+			htmlgen.AttribList{{"type", "submit"}, {"value", "Restart server"}})))
 
-	htmlRoot := makeHTMLNode("html", nil)
-	htmlRoot.appendChild(htmlHead)
-	htmlRoot.appendChild(htmlBody)
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
-	rendered, err := renderHTML(*htmlRoot)
+	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
 	}
