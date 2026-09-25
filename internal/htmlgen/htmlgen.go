@@ -71,10 +71,10 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 	}
 	if len(node.name) == 0 {
 		if len(node.attributes) > 0 {
-			log.Printf("Warning: text element has attributes");
+			log.Printf("Warning: text element has attributes")
 		}
 		if len(node.children) > 0 {
-			log.Printf("Warning: text element has children");
+			log.Printf("Warning: text element has children")
 		}
 		if *newlined {
 			for _ = range indent {
@@ -91,7 +91,7 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 		}
 	} else {
 		if len(node.text) > 0 {
-			log.Printf("Warning: named element has text");
+			log.Printf("Warning: named element has text")
 		}
 		// @todo Turn off indentation for <pre> tags
 		blocky := blockish[node.name]
@@ -116,7 +116,7 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 		voidish := void[node.name]
 		if voidish {
 			if len(node.children) > 0 {
-				log.Printf("Warning: void element has children");
+				log.Printf("Warning: void element has children")
 			}
 			fmt.Fprint(sb, " /")
 		}
