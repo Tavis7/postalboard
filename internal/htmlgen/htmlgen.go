@@ -11,12 +11,12 @@ type attribList [][2]string
 type AttribList = attribList
 
 type Node struct {
-	name           string
-	attributes     attribList
-	attributeIndex map[string][]int
-	children       []*Node
-	text           string
-	raw            bool
+	name           string           // name of tag
+	attributes     attribList       // id, class, etc.
+	attributeIndex map[string][]int // used to check for duplicates
+	children       []*Node          // child nodes
+	text           string           // text for nodes named ""
+	raw            bool             // disables escaping text
 }
 
 var blockish map[string]bool
@@ -31,17 +31,13 @@ func MakeLeafNode(name string) *Node {
 func MakeNode(name string, attributes attribList, children ...*Node) *Node {
 	result := Node{}
 	result.name = name
-	abort := false
 	for _, child := range children {
 		if child == nil {
 			log.Printf("Nil child when making %v: %v", result, children)
-			abort = true
 		}
 	}
 	result.appendAttributes(attributes...)
-	if !abort {
-		result.AppendChildren(children...)
-	}
+	result.AppendChildren(children...)
 	return &result
 }
 
@@ -67,8 +63,19 @@ func (node *Node) appendAttributes(attributes ...[2]string) *Node {
 	return node
 }
 
-func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool) error {
+func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool) {
+	if node == nil {
+		log.Printf("Warning: node is nil: %v", node)
+		log.Printf("Rendered so far: '%v'", sb.String())
+		return
+	}
 	if len(node.name) == 0 {
+		if len(node.attributes) > 0 {
+			log.Printf("Warning: text element has attributes");
+		}
+		if len(node.children) > 0 {
+			log.Printf("Warning: text element has children");
+		}
 		if *newlined {
 			for _ = range indent {
 				fmt.Fprint(sb, "    ")
@@ -77,12 +84,15 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 		*newlined = false
 		if !node.raw {
 			fmt.Fprint(sb, html.EscapeString(node.text))
-			return nil
+			return
 		} else {
 			fmt.Fprint(sb, node.text)
-			return nil
+			return
 		}
 	} else {
+		if len(node.text) > 0 {
+			log.Printf("Warning: named element has text");
+		}
 		// @todo Turn off indentation for <pre> tags
 		blocky := blockish[node.name]
 		if blocky && !*newlined {
@@ -106,10 +116,7 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 		voidish := void[node.name]
 		if voidish {
 			if len(node.children) > 0 {
-				return fmt.Errorf("void element has children")
-			}
-			if len(node.text) > 0 {
-				return fmt.Errorf("void element has text")
+				log.Printf("Warning: void element has children");
 			}
 			fmt.Fprint(sb, " /")
 		}
@@ -122,10 +129,7 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 			children := false
 			for _, child := range node.children {
 				children = true
-				err := renderHTMLNode(child, sb, indent+1, newlined)
-				if err != nil {
-					return err
-				}
+				renderHTMLNode(child, sb, indent+1, newlined)
 			}
 			if blocky && !*newlined && children {
 				fmt.Fprint(sb, "\n")
@@ -143,7 +147,6 @@ func renderHTMLNode(node *Node, sb *strings.Builder, indent int, newlined *bool)
 				*newlined = true
 			}
 		}
-		return nil
 	}
 }
 
@@ -183,8 +186,8 @@ func Render(node Node) (string, error) {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "<!doctype html>\n")
 	blocky := true
-	err := renderHTMLNode(&node, &sb, 0, &blocky)
+	renderHTMLNode(&node, &sb, 0, &blocky)
 	result := sb.String()
 
-	return result, err
+	return result, nil
 }
