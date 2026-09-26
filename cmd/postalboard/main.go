@@ -31,6 +31,29 @@ func testHTMLGenerator() {
 	fmt.Printf("%s\n", rendered)
 }
 
+func postDebugger(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Post handler says \"Hello\"\n")
+	fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
+	fmt.Fprintf(w, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
+	fmt.Fprintf(w, "query:\n")
+	for k, v := range r.URL.Query() {
+		fmt.Fprintf(w, "    %v: %v\n", k, len(v))
+		for _, val := range v {
+			fmt.Fprintf(w, "        %v\n", val)
+		}
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		log.Printf("Error parsing form: %v", err)
+	}
+
+	fmt.Fprintf(w, "form values:\n")
+	for key, val := range r.PostForm {
+		fmt.Fprintf(w, "    %v: '%v'\n", key, val)
+	}
+}
+
 func main() {
 	debugRedirect = true
 	fmt.Println("Starting")

@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"html"
 	"log"
 	"math"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -321,9 +321,12 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 						htmlgen.MakeNode("input",
 							htmlgen.AttribList{{"type", "submit"}, {"value", "post"}}))))
 		} else {
+			redirect := url.QueryEscape(r.URL.Path)
+			loginURL := fmt.Sprintf("/app/login?redirect=%v", redirect)
 			htmlBody.AppendChildren(
 				htmlgen.MakeNode("p", nil,
-					htmlgen.MakeNode("a", htmlgen.AttribList{{"href", "/app/login"}},
+					htmlgen.MakeNode("a",
+						htmlgen.AttribList{{"href", loginURL}},
 						htmlgen.MakeTextNode("Log in")),
 					htmlgen.MakeTextNode(" to post")))
 		}
@@ -334,7 +337,6 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	rendered, err := htmlgen.Render(*htmlRoot)
 	if err != nil {
 		// @todo
-		return
 	}
 
 	fmt.Fprint(w, rendered)
@@ -375,12 +377,29 @@ func postLogout(w http.ResponseWriter, r *http.Request) {
 		// @todo
 	}
 
-	fmt.Fprintf(w, rendered)
+	fmt.Fprint(w, rendered)
 }
 
 func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
+
+	logoutURL := "/app/logout"
+	loginURL := "/app/login"
+
+	q := r.URL.Query()
+	redirects, ok := q["redirect"]
+	log.Printf("login redirect: '%v'", redirects)
+	if ok {
+		if len(redirects) != 1 {
+			// @todo Include URL and other information in log outputs
+			log.Printf("Warning: Too many redirect parameters: %v", redirects)
+		} else {
+			redirect := url.QueryEscape(redirects[0])
+			logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
+			loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
+		}
+	}
 
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
@@ -391,7 +410,9 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	if len(user) != 0 {
 		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Already logged in as "), htmlgen.MakeTextNode(user)))
 		htmlBody.AppendChildren(
-			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}, {"action", "/app/logout"}},
+			htmlgen.MakeNode("form",
+				htmlgen.AttribList{{"method", "post"},
+					{"action", logoutURL}},
 				htmlgen.MakeNode("p", nil,
 					htmlgen.MakeNode("input",
 						htmlgen.AttribList{
@@ -401,14 +422,17 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 					))))
 	} else {
 		htmlBody.AppendChildren(
-			htmlgen.MakeNode("form", htmlgen.AttribList{{"method", "post"}},
+			htmlgen.MakeNode("form",
+				htmlgen.AttribList{{"method", "post"},
+					{"action", loginURL}},
 				htmlgen.MakeNode("label", nil,
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("username"),
 						htmlgen.MakeNode("input",
 							htmlgen.AttribList{{"type", "text"},
 								{"name", "username"}}))),
-				htmlgen.MakeNode("label", htmlgen.AttribList{{ /* @todo */ "style", "display:none"}},
+				htmlgen.MakeNode("label",
+					htmlgen.AttribList{{ /* @todo */ "style", "display:none"}},
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("password"),
 						htmlgen.MakeNode("input",
@@ -427,7 +451,7 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 		// @todo
 	}
 
-	fmt.Fprintf(w, rendered)
+	fmt.Fprint(w, rendered)
 }
 
 func postLogin(w http.ResponseWriter, r *http.Request) {
@@ -446,6 +470,17 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectTo := "/"
+
+	q := r.URL.Query()
+	redirects, ok := q["redirect"]
+	if ok {
+		if len(redirects) != 1 {
+			// @todo Include URL and other information in log outputs
+			log.Printf("Warning: Too many redirect parameters: %v", redirects)
+		}
+		redirectTo = redirects[0]
+	}
+
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("location", redirectTo)
 	if !debugRedirect {
@@ -481,30 +516,7 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 		// @todo
 	}
 
-	fmt.Fprintf(w, rendered)
-}
-
-func postDebugger(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Post handler says \"Hello\"\n")
-	fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
-	fmt.Fprintf(w, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
-	fmt.Fprintf(w, "query:\n")
-	for k, v := range r.URL.Query() {
-		fmt.Fprintf(w, "    %v: %v\n", k, len(v))
-		for _, val := range v {
-			fmt.Fprintf(w, "        %v\n", val)
-		}
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		log.Printf("Error parsing form: %v", err)
-	}
-
-	fmt.Fprintf(w, "form values:\n")
-	for key, val := range r.PostForm {
-		fmt.Fprintf(w, "    %v: '%v'\n", key, val)
-	}
+	fmt.Fprint(w, rendered)
 }
 
 func postBoardPost(w http.ResponseWriter, r *http.Request) {
@@ -554,7 +566,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 		// @todo
 	}
 
-	fmt.Fprintf(w, rendered)
+	fmt.Fprint(w, rendered)
 }
 
 func getHome(w http.ResponseWriter, r *http.Request) {
@@ -582,5 +594,5 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 		// @todo
 	}
 
-	fmt.Fprintf(w, rendered)
+	fmt.Fprint(w, rendered)
 }
