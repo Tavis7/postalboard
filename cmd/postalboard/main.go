@@ -2,13 +2,20 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
-	"github.com/tavis7/postalboard/internal/htmlgen"
 	"html"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/joho/godotenv"
+
+	_ "github.com/lib/pq"
+
+	"github.com/tavis7/postalboard/internal/database"
+	"github.com/tavis7/postalboard/internal/htmlgen"
 )
 
 var debugRedirect bool
@@ -55,6 +62,22 @@ func postDebugger(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	godotenv.Load()
+
+	db_url := os.Getenv("DB_URL")
+	fmt.Printf("DB_URL: '%s'\n", db_url)
+
+	db, err := sql.Open("postgres", db_url)
+	if err != nil {
+		log.Printf("Error opening database: %v", err)
+	}
+
+	fmt.Printf("db: %v\n", db)
+
+	dbQueries := database.New(db)
+
+	fmt.Printf("db queries: %v\n", dbQueries)
+
 	debugRedirect = true
 	fmt.Println("Starting")
 
@@ -104,7 +127,7 @@ func main() {
 		go doShutdown(1)
 	})
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
