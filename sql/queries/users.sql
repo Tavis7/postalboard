@@ -1,10 +1,15 @@
 -- name: CreateUser :one
 INSERT INTO users(id, created_at, updated_at, username, email)
 VALUES(
-    id = id,
-    created_at = NOW(),
-    updated_ad = NOW(),
-    username = username,
-    email = email
+    $1,
+    NOW(),
+    NOW(),
+    $2,
+    $3
 )
 RETURNING *;
+
+-- name: GetUserByUsername :one
+SELECT *
+FROM users
+WHERE username = $1;

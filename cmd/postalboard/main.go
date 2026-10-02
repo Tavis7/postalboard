@@ -61,6 +61,8 @@ func postDebugger(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var dbQueries *database.Queries
+
 func main() {
 	godotenv.Load()
 
@@ -74,7 +76,7 @@ func main() {
 
 	fmt.Printf("db: %v\n", db)
 
-	dbQueries := database.New(db)
+	dbQueries = database.New(db)
 
 	fmt.Printf("db queries: %v\n", dbQueries)
 
@@ -98,11 +100,13 @@ func main() {
 
 	http.HandleFunc("GET /app/boards/{board...}", httpGetBoard)
 	http.HandleFunc("GET /app/login", httpLoginPage)
+	http.HandleFunc("GET /app/register", httpRegisterPage)
 	http.HandleFunc("GET /debug", getDebugger)
 	http.HandleFunc("GET /{$}", getHome)
 
 	http.HandleFunc("POST /app", postDebugger)
 	http.HandleFunc("POST /app/login", postLogin)
+	http.HandleFunc("POST /app/register", postRegister)
 	http.HandleFunc("POST /app/logout", postLogout)
 	http.HandleFunc("POST /app/boards/{board...}", postBoardPost)
 
