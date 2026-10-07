@@ -1,9 +1,6 @@
 package main
 
 import (
-	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -15,8 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/lib/pq"
-
+	"github.com/tavis7/postalboard/internal/auth"
 	"github.com/tavis7/postalboard/internal/database"
 	"github.com/tavis7/postalboard/internal/htmlgen"
 )
@@ -60,59 +56,6 @@ func parseAccept(acceptHeader []string) ([]struct {
 		})
 	}
 	return accepted, nil
-}
-
-func parseCookies(cookieHeader []string) map[string]string {
-	log.Printf("Parsing cookies: %v", cookieHeader)
-	result := map[string]string{}
-	for _, h := range cookieHeader {
-		for _, v := range strings.Split(h, ";") {
-			cookie := strings.SplitN(v, "=", 2)
-			if len(cookie) != 2 {
-				log.Printf("Malformed cookie: %v", v)
-				continue
-			}
-			key := strings.Trim(cookie[0], " ")
-			val := strings.Trim(cookie[1], " ")
-			_, ok := result[key]
-			if ok {
-				log.Printf("Multiple values for cookie: '%v': '%v' -> '%v'",
-					key, result[key], val)
-			}
-			result[key] = val
-		}
-	}
-	return result
-}
-
-func authenticate(context context.Context, username string) (database.User, error) {
-	log.Printf("Authenticating as %v", username)
-	user, err := dbQueries.GetUserByUsername(context, username)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Printf("sql error: %v", err)
-		}
-		pqErr := new(pq.Error)
-		log.Printf("authentication error")
-		if errors.As(err, &pqErr) {
-			log.Printf("pq error: %v", pqErr.Code.Name())
-		}
-		return user, err
-	}
-	return user, nil
-}
-
-func getUser(r *http.Request) (string, error) {
-	cookies := parseCookies(r.Header.Values("cookie"))
-	username := cookies["username"]
-
-	if len(username) == 0 {
-		return "", nil
-	}
-
-	user, err := authenticate(r.Context(), username)
-
-	return user.Username, err
 }
 
 func generateDebugAsHTML(r *http.Request) (*htmlgen.Node, error) {
@@ -199,7 +142,7 @@ func generateDebugAsHTML(r *http.Request) (*htmlgen.Node, error) {
 func getPageHeader(pageTitle, user string) *htmlgen.Node {
 	result := htmlgen.MakeNode("div", htmlgen.AttribList{{"id", "page-header"}})
 
-	result.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode("Site Name")))
+	result.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode("PostalBoard")))
 
 	result.AppendChildren(htmlgen.MakeNode("ul", nil, htmlgen.MakeNode("li", nil,
 		htmlgen.MakeNode("a",
@@ -228,24 +171,20 @@ func getPageHeader(pageTitle, user string) *htmlgen.Node {
 			htmlgen.MakeTextNode(user)))
 	}
 
-	result.AppendChildren(htmlgen.MakeNode("h2", nil,
+	result.AppendChildren(htmlgen.MakeNode("h1", nil,
 		htmlgen.MakeTextNode(pageTitle)))
 
 	return result
 }
 
-func getDebugger(w http.ResponseWriter, r *http.Request) {
+func getDebugger(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error / user not found
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 	htmlBody.AppendChildren(getPageHeader("Debug", username))
 
 	htmlBody.AppendChildren(
@@ -306,7 +245,7 @@ func getDebugger(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func httpGetBoard(w http.ResponseWriter, r *http.Request) {
+func httpGetBoard(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	boardPath := strings.TrimSuffix(r.PathValue("board"), "/")
 
 	posts, err := getMessages(boardPath)
@@ -327,11 +266,7 @@ func httpGetBoard(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 	htmlBody.AppendChildren(getPageHeader(boardPath, username))
 
 	if len(children) > 0 {
@@ -412,11 +347,7 @@ func postLogout(w http.ResponseWriter, r *http.Request) {
 				{"content", fmt.Sprintf("%v;url=%v", timeout, redirectTo)}}))
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := ""
 	htmlBody.AppendChildren(getPageHeader("Logout", username))
 	// @todo Invalidate server login state
 	htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Logged out")))
@@ -436,7 +367,7 @@ func postLogout(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func httpRegisterPage(w http.ResponseWriter, r *http.Request) {
+func httpRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -459,11 +390,7 @@ func httpRegisterPage(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 	htmlBody.AppendChildren(getPageHeader("Register", username))
 
 	if len(username) != 0 {
@@ -514,7 +441,7 @@ func httpRegisterPage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func httpLoginPage(w http.ResponseWriter, r *http.Request) {
+func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -538,11 +465,7 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 
 	htmlBody.AppendChildren(getPageHeader("Login", username))
 
@@ -594,6 +517,7 @@ func httpLoginPage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
+// @todo Handle logged in users
 func respondWithError(w http.ResponseWriter, r *http.Request, statusCode int) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(statusCode)
@@ -601,14 +525,11 @@ func respondWithError(w http.ResponseWriter, r *http.Request, statusCode int) {
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	//username := user.User.Username
+	username := ""
 	htmlBody.AppendChildren(getPageHeader("Home", username))
 
-	htmlBody.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode(fmt.Sprintf("%v", statusCode))))
+	htmlBody.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode(fmt.Sprintf("%v: %v", statusCode, http.StatusText(statusCode)))))
 
 	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
@@ -722,16 +643,17 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 			username = val[0]
 		}
 	}
-	user, err := authenticate(r.Context(), username)
+	user, err := auth.Authenticate(r.Context(), dbQueries, username)
 	if err != nil {
-		// @todo Return error
 		log.Printf("postLogin(): Error getting user: %v", err)
+		respondWithError(w, r, http.StatusInternalServerError)
 		return
 	}
 
-	if user.Username != username {
-		// @todo Return error
-		log.Printf("Error: username doesn't match user: %v != %v", username, user)
+	if user.Username == "" {
+		// @todo Respond with nice login failed page
+		log.Printf("Authentication failed: %v", user)
+		respondWithError(w, r, http.StatusUnauthorized)
 		return
 	}
 
@@ -791,7 +713,7 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func postBoardPost(w http.ResponseWriter, r *http.Request) {
+func postBoardPost(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	boardPath := strings.TrimSuffix(r.PathValue("board"), "/")
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("location", r.URL.Path)
@@ -808,11 +730,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 				{"content", fmt.Sprintf("%v;url=%v", timeout, r.URL.Path)}}))
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 	htmlBody.AppendChildren(getPageHeader("Post", username))
 
 	htmlBody.AppendChildren(htmlgen.MakeNode("a",
@@ -820,7 +738,7 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 		htmlgen.MakeTextNode("Continue")))
 
 	successNode := htmlgen.MakeLeafNode("div")
-	err = r.ParseForm()
+	err := r.ParseForm()
 	if err != nil {
 		log.Printf("Error parsing form: %v", err)
 	}
@@ -846,18 +764,14 @@ func postBoardPost(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func getHome(w http.ResponseWriter, r *http.Request) {
+func getHome(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
 	htmlHead := htmlgen.MakeLeafNode("head")
 	htmlBody := htmlgen.MakeLeafNode("body")
 
-	username, err := getUser(r)
-	if err != nil {
-		// @todo Respond with error
-		log.Printf("Error getting user: %v", err)
-	}
+	username := user.Username
 	htmlBody.AppendChildren(getPageHeader("Home", username))
 
 	htmlBody.AppendChildren(htmlgen.MakeNode("a",
@@ -878,4 +792,27 @@ func getHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, rendered)
+}
+
+func parseCookies(cookieHeader []string) map[string]string {
+	log.Printf("Parsing cookies: %v", cookieHeader)
+	result := map[string]string{}
+	for _, h := range cookieHeader {
+		for _, v := range strings.Split(h, ";") {
+			cookie := strings.SplitN(v, "=", 2)
+			if len(cookie) != 2 {
+				log.Printf("Malformed cookie: %v", v)
+				continue
+			}
+			key := strings.Trim(cookie[0], " ")
+			val := strings.Trim(cookie[1], " ")
+			_, ok := result[key]
+			if ok {
+				log.Printf("Multiple values for cookie: '%v': '%v' -> '%v'",
+					key, result[key], val)
+			}
+			result[key] = val
+		}
+	}
+	return result
 }
