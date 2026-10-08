@@ -161,6 +161,10 @@ func getPageHeader(pageTitle, user string) *htmlgen.Node {
 			htmlgen.MakeNode("a",
 				htmlgen.AttribList{{"href", "/app/login"}},
 				htmlgen.MakeTextNode("Login"))),
+		htmlgen.MakeNode("li", nil,
+			htmlgen.MakeNode("a",
+				htmlgen.AttribList{{"href", "/app/logout"}},
+				htmlgen.MakeTextNode("Logout"))),
 	))
 	if len(user) > 0 {
 		result.AppendChildren(htmlgen.MakeNode("p", nil,
@@ -445,6 +449,67 @@ func httpRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 	fmt.Fprint(w, rendered)
 }
 
+func httpLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+
+	logoutURL := "/app/logout"
+	loginURL := "/app/login"
+
+	q := r.URL.Query()
+	redirects, ok := q["redirect"]
+	log.Printf("login redirect: '%v'", redirects)
+	if ok {
+		if len(redirects) != 1 {
+			// @todo Include URL and other information in log outputs
+			log.Printf("Warning: Too many redirect parameters: %v", redirects)
+		} else {
+			redirect := url.QueryEscape(redirects[0])
+			logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
+			loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
+		}
+	}
+
+	htmlHead := htmlgen.MakeLeafNode("head")
+	htmlBody := htmlgen.MakeLeafNode("body")
+
+	username := user.Username
+
+	htmlBody.AppendChildren(getPageHeader("Logout", username))
+
+	if len(username) != 0 {
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Logged in as "), htmlgen.MakeTextNode(username)))
+		htmlBody.AppendChildren(
+			htmlgen.MakeNode("form",
+				htmlgen.AttribList{{"method", "post"},
+					{"action", logoutURL}},
+				htmlgen.MakeNode("p", nil,
+					htmlgen.MakeNode("input",
+						htmlgen.AttribList{
+							{"type", "submit"},
+							{"value", "Log out"},
+						},
+					))))
+	} else {
+		htmlBody.AppendChildren(
+			htmlgen.MakeNode("p", nil,
+				htmlgen.MakeTextNode("Already logged out")),
+			htmlgen.MakeNode("p", nil,
+				htmlgen.MakeNode("a",
+					htmlgen.AttribList{{"href", loginURL}},
+					htmlgen.MakeTextNode("Log in"))))
+	}
+
+	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
+
+	rendered, err := htmlgen.Render(*htmlRoot)
+	if err != nil {
+		// @todo
+		log.Printf("Error rendering html: %v", err)
+	}
+
+	fmt.Fprint(w, rendered)
+}
 func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)

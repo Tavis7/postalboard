@@ -100,6 +100,7 @@ func main() {
 
 	http.HandleFunc("GET /app/boards/{board...}", middlewareLoggedIn(httpGetBoard))
 	http.HandleFunc("GET /app/login", middlewareLoggedIn(httpLoginPage))
+	http.HandleFunc("GET /app/logout", middlewareLoggedIn(httpLogoutPage))
 	http.HandleFunc("GET /app/register", middlewareLoggedIn(httpRegisterPage))
 	http.HandleFunc("GET /{$}", middlewareLoggedIn(getHome))
 
