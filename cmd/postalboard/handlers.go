@@ -399,7 +399,9 @@ func httpRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 	htmlBody.AppendChildren(getPageHeader("Register", username))
 
 	if len(username) != 0 {
-		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Already logged in as "), htmlgen.MakeTextNode(username)))
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Already logged in as "),
+			htmlgen.MakeTextNode(username)))
 		htmlBody.AppendChildren(
 			htmlgen.MakeNode("form",
 				htmlgen.AttribList{{"method", "post"},
@@ -422,8 +424,7 @@ func httpRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 						htmlgen.MakeNode("input",
 							htmlgen.AttribList{{"type", "text"},
 								{"name", "username"}}))),
-				htmlgen.MakeNode("label",
-					htmlgen.AttribList{{ /* @todo */ "style", "display:none"}},
+				htmlgen.MakeNode("label", nil,
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("password"),
 						htmlgen.MakeNode("input",
@@ -468,7 +469,9 @@ func httpLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.
 	htmlBody.AppendChildren(getPageHeader("Logout", username))
 
 	if len(username) != 0 {
-		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Logged in as "), htmlgen.MakeTextNode(username)))
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Logged in as "),
+			htmlgen.MakeTextNode(username)))
 		htmlBody.AppendChildren(
 			htmlgen.MakeNode("form",
 				htmlgen.AttribList{{"method", "post"},
@@ -512,7 +515,7 @@ func getRedirect(r *http.Request) string {
 		} else {
 			// @todo Configuration whitelist
 			if r.Host == refererURL.Host {
-				redirect = refererURL.Path
+				redirect = url.QueryEscape(refererURL.Path)
 			} else {
 				log.Printf("Not redirecting to referer: %v is not at %v", referer, r.Host)
 			}
@@ -541,10 +544,12 @@ func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 
 	logoutURL := "/app/logout"
 	loginURL := "/app/login"
+	registerURL := "/app/register"
 
 	if len(redirect) > 0 {
 		logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
 		loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
+		registerURL = strings.Join([]string{registerURL, "?redirect=", redirect}, "")
 	}
 
 	htmlHead := htmlgen.MakeLeafNode("head")
@@ -555,7 +560,9 @@ func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 	htmlBody.AppendChildren(getPageHeader("Login", username))
 
 	if len(username) != 0 {
-		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil, htmlgen.MakeTextNode("Already logged in as "), htmlgen.MakeTextNode(username)))
+		htmlBody.AppendChildren(htmlgen.MakeNode("p", nil,
+			htmlgen.MakeTextNode("Already logged in as "),
+			htmlgen.MakeTextNode(username)))
 		htmlBody.AppendChildren(
 			htmlgen.MakeNode("form",
 				htmlgen.AttribList{{"method", "post"},
@@ -578,8 +585,7 @@ func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 						htmlgen.MakeNode("input",
 							htmlgen.AttribList{{"type", "text"},
 								{"name", "username"}}))),
-				htmlgen.MakeNode("label",
-					htmlgen.AttribList{{ /* @todo */ "style", "display:none"}},
+				htmlgen.MakeNode("label", nil,
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("password"),
 						htmlgen.MakeNode("input",
@@ -588,6 +594,8 @@ func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 				htmlgen.MakeNode("input",
 					htmlgen.AttribList{{"type", "submit"},
 						{"value", "login"}})),
+			htmlgen.MakeNode("a", htmlgen.AttribList{{"href", registerURL}},
+				htmlgen.MakeTextNode("Register")),
 		)
 	}
 
@@ -614,7 +622,9 @@ func respondWithError(w http.ResponseWriter, r *http.Request, statusCode int) {
 	username := ""
 	htmlBody.AppendChildren(getPageHeader("Home", username))
 
-	htmlBody.AppendChildren(htmlgen.MakeNode("h1", nil, htmlgen.MakeTextNode(fmt.Sprintf("%v: %v", statusCode, http.StatusText(statusCode)))))
+	htmlBody.AppendChildren(htmlgen.MakeNode("h1", nil,
+		htmlgen.MakeTextNode(fmt.Sprintf("%v: %v",
+			statusCode, http.StatusText(statusCode)))))
 
 	htmlRoot := htmlgen.MakeNode("html", nil, htmlHead, htmlBody)
 
@@ -843,7 +853,8 @@ func postBoardPost(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 		successNode.AppendChildren(htmlgen.MakeTextNode("No post"))
 	} else {
 		postMessage(boardPath, username, postText[0])
-		successNode.AppendChildren(htmlgen.MakeTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
+		successNode.AppendChildren(
+			htmlgen.MakeTextNode(fmt.Sprintf("Posted '%v'", postText[0])))
 	}
 
 	htmlBody.AppendChildren(successNode)
