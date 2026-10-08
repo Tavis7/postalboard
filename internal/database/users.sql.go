@@ -7,30 +7,40 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users(id, created_at, updated_at, username, email)
+INSERT INTO users(id, created_at, updated_at, username, email, hashed_password)
 VALUES(
     $1,
-    NOW(),
-    NOW(),
     $2,
-    $3
+    $2,
+    $3,
+    $4,
+    $5
 )
-RETURNING id, created_at, updated_at, username, email
+RETURNING id, created_at, updated_at, username, email, hashed_password
 `
 
 type CreateUserParams struct {
-	ID       uuid.UUID
-	Username string
-	Email    string
+	ID             uuid.UUID
+	CreatedAt      time.Time
+	Username       string
+	Email          string
+	HashedPassword string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.ID, arg.Username, arg.Email)
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.ID,
+		arg.CreatedAt,
+		arg.Username,
+		arg.Email,
+		arg.HashedPassword,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -38,14 +48,35 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Username,
 		&i.Email,
+		&i.HashedPassword,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, created_at, updated_at, username, email, hashed_password
+FROM users
+WHERE users.id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Username,
+		&i.Email,
+		&i.HashedPassword,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, created_at, updated_at, username, email
+SELECT id, created_at, updated_at, username, email, hashed_password
 FROM users
-WHERE username = $1
+WHERE users.username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -57,6 +88,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.UpdatedAt,
 		&i.Username,
 		&i.Email,
+		&i.HashedPassword,
 	)
 	return i, err
 }

@@ -12,20 +12,18 @@ type handler func(http.ResponseWriter, *http.Request)
 
 func middlewareLoggedIn(handler authenticatedFunc) handler {
 	result := func(w http.ResponseWriter, r *http.Request) {
-		user := auth.AuthenticatedUser{}
-
 		cookies := parseCookies(r.Header.Values("cookie"))
 
-		username, ok := cookies["username"]
-		if !ok || (len(username) != 0) {
-			// If no credentials are given user is not logged in
-			// @todo Notify user when authentication fails?
-			// @todo Delete cookie when login fails?
-			user_, err := auth.ValidateToken(r.Context(), dbQueries, username)
-			if err != nil {
-				log.Printf("Error: %v", err)
-			}
-			user = user_
+		//refresh_token := cookies["auth_refresh"]
+		token := cookies["auth_refresh"]
+		//refresh_token := cookies["auth_refresh"]
+		// If no credentials are given user is not logged in
+		// @todo Notify user when authentication fails?
+		// @todo Delete cookie when login fails?
+		user, err := auth.ValidateToken(r.Context(), dbQueries, token)
+		if err != nil {
+			log.Printf("Error: %v", err)
+			// @todo Maybe reset auth_refresh cookie
 		}
 
 		handler(user, w, r)

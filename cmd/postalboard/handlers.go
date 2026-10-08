@@ -10,10 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/tavis7/postalboard/internal/auth"
-	"github.com/tavis7/postalboard/internal/database"
 	"github.com/tavis7/postalboard/internal/htmlgen"
 )
 
@@ -327,7 +324,14 @@ func httpGetBoard(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Re
 	fmt.Fprint(w, rendered)
 }
 
-func postLogout(w http.ResponseWriter, r *http.Request) {
+func postLogout(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+	log.Printf("Logging out as %v", user)
+	err := auth.Logout(r.Context(), dbQueries, user)
+	if err != nil {
+		log.Printf("Auth error logging out: %v", err)
+	}
+	log.Printf("Should be logged out now")
+
 	redirectTo := "/app/login"
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("location", redirectTo)
@@ -549,9 +553,13 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := ""
+	password := ""
 	for key, val := range r.PostForm {
-		if key == "username" {
+		if username == "" && key == "username" {
 			username = val[0]
+		}
+		if password == "" && key == "password" {
+			password = val[0]
 		}
 	}
 
@@ -567,22 +575,19 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 		redirectTo = redirects[0]
 	}
 
-	users, err := dbQueries.CreateUser(r.Context(),
-		database.CreateUserParams{uuid.New(), username,
-			fmt.Sprintf("%s@localhost" /* @todo */, username)})
+	user, err := auth.CreateUser(r.Context(), dbQueries, username, password)
 	if err != nil {
-		// @todo Detect user already exists
-		log.Printf("Error registering user: %v", err)
+		log.Printf("Error creating user: %v", err)
 		respondWithError(w, r, http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("%v", users)
+	log.Printf("%v", user)
 
-	if username != users.Username {
+	if username != user.Username {
 		// @todo
 		log.Printf("Error: username doesn't match created user's username: %v != %v",
-			username, users.Username)
+			username, user.Username)
 		respondWithError(w, r, http.StatusInternalServerError)
 		return
 	}
@@ -600,7 +605,7 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 
-	log.Printf("Registered as %s", users.Username)
+	log.Printf("Registered as %s", user.Username)
 
 	timeout := 3
 	htmlHead := htmlgen.MakeNode("head", nil,
@@ -638,12 +643,19 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := ""
+	password := ""
 	for key, val := range r.PostForm {
-		if key == "username" {
+		if username == "" && key == "username" {
 			username = val[0]
 		}
+		if password == "" && key == "password" {
+			password = val[0]
+		}
 	}
-	user, err := auth.Authenticate(r.Context(), dbQueries, username)
+
+	// @todo Account recovery
+	user, token, err := auth.Authenticate(r.Context(), dbQueries, username, password)
+
 	if err != nil {
 		log.Printf("postLogin(): Error getting user: %v", err)
 		respondWithError(w, r, http.StatusInternalServerError)
@@ -657,7 +669,9 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Add("Set-Cookie", fmt.Sprintf("username=%s; path=/", username))
+	log.Printf("postLogin(): user: %v", user)
+
+	w.Header().Add("Set-Cookie", fmt.Sprintf("auth_refresh=%s; path=/", token))
 	log.Printf("Logged in as %v", username)
 
 	redirectTo := "/"
