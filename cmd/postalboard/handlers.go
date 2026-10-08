@@ -68,6 +68,10 @@ func generateDebugAsHTML(r *http.Request) (*htmlgen.Node, error) {
 	result.AppendChildren(htmlgen.MakeNode("p", nil,
 		htmlgen.MakeTextNode(fmt.Sprintf("protocol: %q", r.Proto))))
 	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode(fmt.Sprintf("Request host: %q", r.Host))))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
+		htmlgen.MakeTextNode(fmt.Sprintf("Request URL host: %q", r.URL.Host))))
+	result.AppendChildren(htmlgen.MakeNode("p", nil,
 		htmlgen.MakeTextNode("headers:")))
 	headerListNode := htmlgen.MakeLeafNode("ul")
 	result.AppendChildren(headerListNode)
@@ -301,9 +305,8 @@ func httpGetBoard(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Re
 						htmlgen.MakeNode("input",
 							htmlgen.AttribList{{"type", "submit"}, {"value", "post"}}))))
 		} else {
-			redirect := url.QueryEscape(r.URL.Path)
-			loginURL := fmt.Sprintf("/app/login?redirect=%v", redirect)
-			registerURL := fmt.Sprintf("/app/register?redirect=%v", redirect)
+			loginURL := fmt.Sprintf("/app/login")
+			registerURL := fmt.Sprintf("/app/register")
 			htmlBody.AppendChildren(
 				htmlgen.MakeNode("p", nil,
 					htmlgen.MakeNode("a",
@@ -379,20 +382,14 @@ func httpRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
+	redirect := getRedirect(r)
+
 	logoutURL := "/app/logout"
 	registerURL := "/app/register"
 
-	q := r.URL.Query()
-	redirects, ok := q["redirect"]
-	log.Printf("register redirect: '%v'", redirects)
-	if ok {
-		if len(redirects) != 1 {
-			// @todo Include URL and other information in log outputs
-			log.Printf("Warning: Too many redirect parameters: %v", redirects)
-		} else {
-			redirect := url.QueryEscape(redirects[0])
-			registerURL = strings.Join([]string{registerURL, "?redirect=", redirect}, "")
-		}
+	if len(redirect) > 0 {
+		logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
+		registerURL = strings.Join([]string{registerURL, "?redirect=", redirect}, "")
 	}
 
 	htmlHead := htmlgen.MakeLeafNode("head")
@@ -453,21 +450,14 @@ func httpLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
+	redirect := getRedirect(r)
+
 	logoutURL := "/app/logout"
 	loginURL := "/app/login"
 
-	q := r.URL.Query()
-	redirects, ok := q["redirect"]
-	log.Printf("login redirect: '%v'", redirects)
-	if ok {
-		if len(redirects) != 1 {
-			// @todo Include URL and other information in log outputs
-			log.Printf("Warning: Too many redirect parameters: %v", redirects)
-		} else {
-			redirect := url.QueryEscape(redirects[0])
-			logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
-			loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
-		}
+	if len(redirect) > 0 {
+		logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
+		loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
 	}
 
 	htmlHead := htmlgen.MakeLeafNode("head")
@@ -510,12 +500,24 @@ func httpLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.
 
 	fmt.Fprint(w, rendered)
 }
-func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
 
-	logoutURL := "/app/logout"
-	loginURL := "/app/login"
+func getRedirect(r *http.Request) string {
+	refererHeaders := r.Header.Values("referer")
+	redirect := ""
+	if len(refererHeaders) > 0 {
+		referer := refererHeaders[0]
+		refererURL, err := url.Parse(referer)
+		if err != nil {
+			log.Printf("Error parsing referer: %v", referer)
+		} else {
+			// @todo Configuration whitelist
+			if r.Host == refererURL.Host {
+				redirect = refererURL.Path
+			} else {
+				log.Printf("Not redirecting to referer: %v is not at %v", referer, r.Host)
+			}
+		}
+	}
 
 	q := r.URL.Query()
 	redirects, ok := q["redirect"]
@@ -525,10 +527,24 @@ func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 			// @todo Include URL and other information in log outputs
 			log.Printf("Warning: Too many redirect parameters: %v", redirects)
 		} else {
-			redirect := url.QueryEscape(redirects[0])
-			logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
-			loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
+			redirect = url.QueryEscape(redirects[0])
 		}
+	}
+	return redirect
+}
+
+func httpLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+
+	redirect := getRedirect(r)
+
+	logoutURL := "/app/logout"
+	loginURL := "/app/login"
+
+	if len(redirect) > 0 {
+		logoutURL = strings.Join([]string{logoutURL, "?redirect=", redirect}, "")
+		loginURL = strings.Join([]string{loginURL, "?redirect=", redirect}, "")
 	}
 
 	htmlHead := htmlgen.MakeLeafNode("head")
