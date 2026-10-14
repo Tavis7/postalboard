@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/lib/pq/pqerror"
 
 	"github.com/tavis7/postalboard/internal/database"
 )
@@ -24,6 +25,7 @@ type AuthenticatedUser struct {
 func CreateUser(context context.Context, dbQueries *database.Queries, username, password string) (AuthenticatedUser, error) {
 	result := AuthenticatedUser{}
 	hashed_password, err := hashPassword(password)
+
 	if err != nil {
 		return result, err
 	}
@@ -31,10 +33,14 @@ func CreateUser(context context.Context, dbQueries *database.Queries, username, 
 		database.CreateUserParams{uuid.New(), time.Now().UTC(), username,
 			fmt.Sprintf("%s@localhost" /* @todo */, username), hashed_password})
 	if err != nil {
+		if pq.As(err, pqerror.UniqueViolation) != nil {
+			log.Printf("User already exists: %v", err)
+		}
 		// @todo Detect user already exists
 		log.Printf("Error registering user: %v", err)
 		return result, fmt.Errorf("Error registering user: %w", err)
 	}
+
 	result.user = user
 	result.Username = user.Username
 	result.UserID = user.ID
@@ -68,8 +74,8 @@ func Authenticate(context context.Context, dbQueries *database.Queries, username
 	result.user = user
 	result.Username = user.Username
 	result.UserID = user.ID
-	getNewToken(context, dbQueries, &result)
-	return result, result.token.Token, nil
+	err = getNewToken(context, dbQueries, &result)
+	return result, result.token.Token, err
 }
 
 func Logout(context context.Context, dbQueries *database.Queries, user AuthenticatedUser) error {
@@ -87,7 +93,7 @@ func InvalidateRefreshToken(context context.Context, dbQueries *database.Queries
 	return err
 }
 
-func getNewToken(context context.Context, dbQueries *database.Queries, user *AuthenticatedUser) {
+func getNewToken(context context.Context, dbQueries *database.Queries, user *AuthenticatedUser) error {
 	token := generateRefreshToken()
 
 	// @todo @configuration login duration
@@ -102,9 +108,10 @@ func getNewToken(context context.Context, dbQueries *database.Queries, user *Aut
 		database.CreateRefreshTokenParams{token, now, expires, user.UserID})
 	if err != nil {
 		log.Printf("Error storing new refresh token: %v", err)
-		return
+		return fmt.Errorf("Failed to create refresh token: %w", err)
 	}
 	user.token = tokenRow
+	return nil
 }
 
 func ValidateToken(context context.Context, dbQueries *database.Queries, token string) (AuthenticatedUser, error) {

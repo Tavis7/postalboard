@@ -11,5 +11,8 @@ do
     then
         echo "Quitting: $STATUS"
         RUNNING=0
+    else
+        echo
+        echo
     fi
 done

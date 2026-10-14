@@ -19,47 +19,20 @@ import (
 
 var debugRedirect bool
 
-func postDebugger(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Post handler says \"Hello\"\n")
-	fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
-	fmt.Fprintf(w, "raw query: %q\n", html.EscapeString(r.URL.RawQuery))
-	fmt.Fprintf(w, "query:\n")
-	for k, v := range r.URL.Query() {
-		fmt.Fprintf(w, "    %v: %v\n", k, len(v))
-		for _, val := range v {
-			fmt.Fprintf(w, "        %v\n", val)
-		}
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		log.Printf("Error parsing form: %v", err)
-	}
-
-	fmt.Fprintf(w, "form values:\n")
-	for key, val := range r.PostForm {
-		fmt.Fprintf(w, "    %v: '%v'\n", key, val)
-	}
-}
-
 var dbQueries *database.Queries
 
 func main() {
 	godotenv.Load()
 
 	db_url := os.Getenv("DB_URL")
-	fmt.Printf("DB_URL: '%s'\n", db_url)
 
 	db, err := sql.Open("postgres", db_url)
 	if err != nil {
+		// @todo Fatal?
 		log.Printf("Error opening database: %v", err)
 	}
 
-	fmt.Printf("db: %v\n", db)
-
 	dbQueries = database.New(db)
-
-	fmt.Printf("db queries: %v\n", dbQueries)
 
 	debugRedirect = true
 	fmt.Println("Starting")
@@ -78,19 +51,19 @@ func main() {
 
 	shutdownChan := make(chan struct{})
 
-	http.HandleFunc("GET /app/boards/{board...}", middlewareLoggedIn(httpGetBoard))
-	http.HandleFunc("GET /app/login", middlewareLoggedIn(httpLoginPage))
-	http.HandleFunc("GET /app/logout", middlewareLoggedIn(httpLogoutPage))
-	http.HandleFunc("GET /app/register", middlewareLoggedIn(httpRegisterPage))
-	http.HandleFunc("GET /{$}", middlewareLoggedIn(getHome))
+	http.HandleFunc("GET /{$}", middlewareLoggedIn(handlerHomePage))
+	http.HandleFunc("GET /app/login", middlewareLoggedIn(handlerLoginPage))
+	http.HandleFunc("GET /app/logout", middlewareLoggedIn(handlerLogoutPage))
+	http.HandleFunc("GET /app/register", middlewareLoggedIn(handlerRegisterPage))
+	http.HandleFunc("GET /app/boards/{board...}", middlewareLoggedIn(handlerBoardPage))
 
-	http.HandleFunc("GET /debug", middlewareLoggedIn(getDebugger))
+	http.HandleFunc("GET /debug", middlewareLoggedIn(handlerDebugGetRequest))
+	http.HandleFunc("POST /debug", middlewareLoggedIn(handlerDebugPostRequest))
 
-	http.HandleFunc("POST /app", postDebugger)
-	http.HandleFunc("POST /app/login", postLogin)
-	http.HandleFunc("POST /app/register", postRegister)
-	http.HandleFunc("POST /app/logout", middlewareLoggedIn(postLogout))
-	http.HandleFunc("POST /app/boards/{board...}", middlewareLoggedIn(postBoardPost))
+	http.HandleFunc("POST /app/login", handlerLogin)
+	http.HandleFunc("POST /app/register", handlerRegister)
+	http.HandleFunc("POST /app/logout", middlewareLoggedIn(handlerLogout))
+	http.HandleFunc("POST /app/boards/{board...}", middlewareLoggedIn(handlerMakePost))
 
 	doShutdown := func(code int) {
 		exitCode = code
