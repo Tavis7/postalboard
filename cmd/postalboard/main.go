@@ -15,28 +15,9 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/tavis7/postalboard/internal/database"
-	"github.com/tavis7/postalboard/internal/htmlgen"
 )
 
 var debugRedirect bool
-
-func testHTMLGenerator() {
-	log.Printf("testHMTLGenerator")
-	testNode := htmlgen.MakeNode("p", htmlgen.AttribList{{"class", "something"}, {"id", "foobar"}})
-	testNode.AppendChildren(htmlgen.MakeTextNode("hello "))
-	testSpan := htmlgen.MakeLeafNode("span")
-	testSpan.AppendChildren(htmlgen.MakeTextNode("world"))
-	testNode.AppendChildren(testSpan)
-	log.Printf("testNode: %v\n", testNode)
-	testRoot := htmlgen.MakeNode("html", nil,
-		htmlgen.MakeNode("body", nil, testNode))
-	log.Printf("testRoot: %v\n", testRoot)
-	rendered, err := htmlgen.Render(*testRoot)
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-	}
-	fmt.Printf("%s\n", rendered)
-}
 
 func postDebugger(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Post handler says \"Hello\"\n")
@@ -83,7 +64,6 @@ func main() {
 	debugRedirect = true
 	fmt.Println("Starting")
 
-	testHTMLGenerator()
 	initializeBoards()
 	createBoard("test-board")
 	postMessage("test-board", "me", "test post please ignore")

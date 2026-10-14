@@ -15,6 +15,7 @@ func TestGenerateRefreshToken(t *testing.T) {
 }
 
 func TestValidatePassword(t *testing.T) {
+	// @note Testing is quadratic in the length of passwords array
 	passwords := []string{
 		"",
 		"x",
@@ -30,21 +31,22 @@ func TestValidatePassword(t *testing.T) {
 			t.Errorf("Hashing password failed: '%s': %v", password, err)
 			continue
 		}
-		t.Run(fmt.Sprintf("password:%d,'%s'", i, password),
-			func(t *testing.T) {
-				if !validatePassword(password, hashed) {
-					t.Errorf("Validation failed: '%s', '%v'", password, hashed)
-				}
-			})
 
-		for j, fakePassword := range passwords {
+		for j, testPassword := range passwords {
 			if i != j {
 				t.Run(fmt.Sprintf("password:%d!=%d,'%s'!='%s'",
-					i, j, password, fakePassword),
+					i, j, password, testPassword),
 					func(t *testing.T) {
-						if validatePassword(fakePassword, hashed) {
+						if validatePassword(testPassword, hashed) {
 							t.Errorf("Validation succeeded incorrectly: '%s' ?= '%s', '%v'",
-								password, fakePassword, hashed)
+								password, testPassword, hashed)
+						}
+					})
+			} else {
+				t.Run(fmt.Sprintf("password:%d,'%s'", i, password),
+					func(t *testing.T) {
+						if !validatePassword(password, hashed) {
+							t.Errorf("Validation failed: '%s', '%v'", password, hashed)
 						}
 					})
 			}

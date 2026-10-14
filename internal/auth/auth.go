@@ -2,15 +2,12 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
-	"github.com/alexedwards/argon2id"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
@@ -153,26 +150,4 @@ func ValidateToken(context context.Context, dbQueries *database.Queries, token s
 	result.token = user.RefreshToken
 	result.Username = result.user.Username
 	return result, nil
-}
-
-func hashPassword(password string) (string, error) {
-	return argon2id.CreateHash(password, argon2id.DefaultParams)
-}
-
-func validatePassword(password, hashed_password string) bool {
-	match, err := argon2id.ComparePasswordAndHash(password, hashed_password)
-	if err != nil {
-		log.Printf("Error validating password: %v", err)
-		return false
-	}
-	return match
-}
-
-func generateRefreshToken() string {
-	data := [32]byte{}
-	_, err := rand.Read(data[:])
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-	}
-	return hex.EncodeToString(data[:])
 }
