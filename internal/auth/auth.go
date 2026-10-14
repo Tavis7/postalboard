@@ -163,6 +163,7 @@ func validatePassword(password, hashed_password string) bool {
 	match, err := argon2id.ComparePasswordAndHash(password, hashed_password)
 	if err != nil {
 		log.Printf("Error validating password: %v", err)
+		return false
 	}
 	return match
 }
