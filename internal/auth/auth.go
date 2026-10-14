@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/lib/pq/pqerror"
 
+	"github.com/tavis7/postalboard/internal/config"
 	"github.com/tavis7/postalboard/internal/database"
 )
 
@@ -22,14 +23,21 @@ type AuthenticatedUser struct {
 	UserID   uuid.UUID
 }
 
-func CreateUser(context context.Context, dbQueries *database.Queries, username, password string) (AuthenticatedUser, error) {
+func CreateUser(cfg config.Config, context context.Context, username, password string) (AuthenticatedUser, error) {
 	result := AuthenticatedUser{}
+
+	if len(password) < int(cfg.PasswordMinLength) ||
+		len(password) > int(cfg.PasswordMaxLength) {
+		return result, fmt.Errorf("Password must be between %d and %d characters long",
+			cfg.PasswordMinLength, cfg.PasswordMaxLength)
+	}
+
 	hashed_password, err := hashPassword(password)
 
 	if err != nil {
 		return result, err
 	}
-	user, err := dbQueries.CreateUser(context,
+	user, err := cfg.DbQueries.CreateUser(context,
 		database.CreateUserParams{uuid.New(), time.Now().UTC(), username,
 			fmt.Sprintf("%s@localhost" /* @todo */, username), hashed_password})
 	if err != nil {
@@ -44,14 +52,14 @@ func CreateUser(context context.Context, dbQueries *database.Queries, username, 
 	result.user = user
 	result.Username = user.Username
 	result.UserID = user.ID
-	getNewToken(context, dbQueries, &result)
+	getNewToken(context, cfg.DbQueries, &result)
 	return result, err
 }
 
-func Authenticate(context context.Context, dbQueries *database.Queries, username, password string) (AuthenticatedUser, string, error) {
+func Authenticate(cfg config.Config, context context.Context, username, password string) (AuthenticatedUser, string, error) {
 	log.Printf("Authenticating as %v", username)
 	result := AuthenticatedUser{}
-	user, err := dbQueries.GetUserByUsername(context, username)
+	user, err := cfg.DbQueries.GetUserByUsername(context, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			log.Printf("sql error: %v", err)
@@ -74,16 +82,16 @@ func Authenticate(context context.Context, dbQueries *database.Queries, username
 	result.user = user
 	result.Username = user.Username
 	result.UserID = user.ID
-	err = getNewToken(context, dbQueries, &result)
+	err = getNewToken(context, cfg.DbQueries, &result)
 	return result, result.token.Token, err
 }
 
-func Logout(context context.Context, dbQueries *database.Queries, user AuthenticatedUser) error {
-	return InvalidateRefreshToken(context, dbQueries, user.token.Token)
+func Logout(cfg config.Config, context context.Context, user AuthenticatedUser) error {
+	return InvalidateRefreshToken(cfg, context, user.token.Token)
 }
 
-func InvalidateRefreshToken(context context.Context, dbQueries *database.Queries, token string) error {
-	row, err := dbQueries.RevokeRefreshToken(context,
+func InvalidateRefreshToken(cfg config.Config, context context.Context, token string) error {
+	row, err := cfg.DbQueries.RevokeRefreshToken(context,
 		database.RevokeRefreshTokenParams{token,
 			sql.NullTime{time.Now().UTC(), true},
 		})
@@ -114,11 +122,11 @@ func getNewToken(context context.Context, dbQueries *database.Queries, user *Aut
 	return nil
 }
 
-func ValidateToken(context context.Context, dbQueries *database.Queries, token string) (AuthenticatedUser, error) {
+func ValidateToken(cfg config.Config, context context.Context, token string) (AuthenticatedUser, error) {
 	// @todo Currently accepts any registered user
 	log.Printf("Authenticating with token: %v", token)
 	result := AuthenticatedUser{}
-	user, err := dbQueries.GetUserByRefreshToken(context, token)
+	user, err := cfg.DbQueries.GetUserByRefreshToken(context, token)
 	log.Printf("Username %v", user.User.Username)
 	log.Printf("User: %v", user)
 	if err != nil {
@@ -148,7 +156,7 @@ func ValidateToken(context context.Context, dbQueries *database.Queries, token s
 
 	if now.Compare(user.RefreshToken.ExpiresAt) >= 0 {
 		// @todo Reset login cookie
-		InvalidateRefreshToken(context, dbQueries, user.RefreshToken.Token)
+		InvalidateRefreshToken(cfg, context, user.RefreshToken.Token)
 		return result, fmt.Errorf("Refresh token '%s' expired at %v",
 			user.RefreshToken.Token, user.RefreshToken.ExpiresAt)
 	}

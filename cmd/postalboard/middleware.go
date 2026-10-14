@@ -5,9 +5,10 @@ import (
 	"net/http"
 
 	"github.com/tavis7/postalboard/internal/auth"
+	"github.com/tavis7/postalboard/internal/config"
 )
 
-type authenticatedFunc func(auth.AuthenticatedUser, http.ResponseWriter, *http.Request)
+type authenticatedFunc func(config.Config, auth.AuthenticatedUser, http.ResponseWriter, *http.Request)
 type handler func(http.ResponseWriter, *http.Request)
 
 func middlewareLoggedIn(handler authenticatedFunc) handler {
@@ -20,13 +21,13 @@ func middlewareLoggedIn(handler authenticatedFunc) handler {
 		// If no credentials are given user is not logged in
 		// @todo Notify user when authentication fails?
 		// @todo Delete cookie when login fails?
-		user, err := auth.ValidateToken(r.Context(), dbQueries, token)
+		user, err := auth.ValidateToken(cfg, r.Context(), token)
 		if err != nil {
 			log.Printf("Error: %v", err)
 			// @todo Maybe reset auth_refresh cookie
 		}
 
-		handler(user, w, r)
+		handler(cfg, user, w, r)
 	}
 	return result
 }

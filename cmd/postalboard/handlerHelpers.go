@@ -1,12 +1,12 @@
 package main
 
 import (
-	"net/url"
 	"fmt"
 	"log"
 	"math"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 

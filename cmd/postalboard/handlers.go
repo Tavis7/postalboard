@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"strings"
-	"html"
 
 	"github.com/tavis7/postalboard/internal/auth"
+	"github.com/tavis7/postalboard/internal/config"
 	"github.com/tavis7/postalboard/internal/htmlgen"
 )
 
-func handlerDebugPostRequest(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerDebugPostRequest(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	// @todo merge with handlerDebugGetRequest
 	fmt.Fprintf(w, "Post handler says \"Hello\"\n")
 	fmt.Fprintf(w, "path: %q\n", html.EscapeString(r.URL.Path))
@@ -35,7 +36,7 @@ func handlerDebugPostRequest(user auth.AuthenticatedUser, w http.ResponseWriter,
 	}
 }
 
-func handlerDebugGetRequest(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerDebugGetRequest(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -84,7 +85,7 @@ func handlerDebugGetRequest(user auth.AuthenticatedUser, w http.ResponseWriter, 
 	fmt.Fprint(w, rendered)
 }
 
-func handlerBoardPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerBoardPage(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	boardPath := strings.TrimSuffix(r.PathValue("board"), "/")
 
 	posts, err := getMessages(boardPath)
@@ -165,9 +166,9 @@ func handlerBoardPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 	fmt.Fprint(w, rendered)
 }
 
-func handlerLogout(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerLogout(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	log.Printf("Logging out as %v", user)
-	err := auth.Logout(r.Context(), dbQueries, user)
+	err := auth.Logout(cfg, r.Context(), user)
 	if err != nil {
 		log.Printf("Auth error logging out: %v", err)
 	}
@@ -212,7 +213,7 @@ func handlerLogout(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.R
 	fmt.Fprint(w, rendered)
 }
 
-func handlerRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerRegisterPage(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -256,14 +257,36 @@ func handlerRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("username"),
 						htmlgen.MakeNode("input",
-							htmlgen.AttribList{{"type", "text"},
-								{"name", "username"}}))),
+							htmlgen.AttribList{
+								{"type", "text"},
+								{"name", "username"},
+								{"required", "true"},
+							}))),
 				htmlgen.MakeNode("label", nil,
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("password"),
 						htmlgen.MakeNode("input",
-							htmlgen.AttribList{{"type", "password"},
-								{"name", "password"}}))),
+							htmlgen.AttribList{
+								{"type", "password"},
+								{"name", "password"},
+								{"title",
+									fmt.Sprintf(
+										"Password must be between %d and %d characters long",
+										cfg.PasswordMinLength,
+										cfg.PasswordMaxLength)},
+								{"required", "true"},
+								{"pattern",
+									fmt.Sprintf(".{%d,%d}",
+										cfg.PasswordMinLength,
+										cfg.PasswordMaxLength)},
+							}),
+						htmlgen.MakeNode("p", nil,
+							htmlgen.MakeTextNode(
+								fmt.Sprintf(
+									"Password must be between %d and %d characters long",
+									cfg.PasswordMinLength,
+									cfg.PasswordMaxLength)),
+						))),
 				htmlgen.MakeNode("input",
 					htmlgen.AttribList{{"type", "submit"},
 						{"value", "register"}})),
@@ -281,7 +304,7 @@ func handlerRegisterPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *
 	fmt.Fprint(w, rendered)
 }
 
-func handlerLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerLogoutPage(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -338,7 +361,7 @@ func handlerLogoutPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *ht
 	fmt.Fprint(w, rendered)
 }
 
-func handlerLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerLoginPage(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 
@@ -385,14 +408,19 @@ func handlerLoginPage(user auth.AuthenticatedUser, w http.ResponseWriter, r *htt
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("username"),
 						htmlgen.MakeNode("input",
-							htmlgen.AttribList{{"type", "text"},
-								{"name", "username"}}))),
+							htmlgen.AttribList{
+								{"type", "text"},
+								{"name", "username"},
+								{"required", "true"},
+							}))),
 				htmlgen.MakeNode("label", nil,
 					htmlgen.MakeNode("div", nil,
 						htmlgen.MakeTextNode("password"),
 						htmlgen.MakeNode("input",
-							htmlgen.AttribList{{"type", "password"},
-								{"name", "password"}}))),
+							htmlgen.AttribList{
+								{"type", "password"},
+								{"name", "password"},
+							}))),
 				htmlgen.MakeNode("input",
 					htmlgen.AttribList{{"type", "submit"},
 						{"value", "login"}})),
@@ -468,7 +496,7 @@ func handlerRegister(w http.ResponseWriter, r *http.Request) {
 		redirectTo = redirects[0]
 	}
 
-	user, err := auth.CreateUser(r.Context(), dbQueries, username, password)
+	user, err := auth.CreateUser(cfg, r.Context(), username, password)
 	if err != nil {
 		log.Printf("Error creating user: %v", err)
 		respondWithError(w, r, http.StatusInternalServerError)
@@ -547,7 +575,7 @@ func handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// @todo Account recovery
-	user, token, err := auth.Authenticate(r.Context(), dbQueries, username, password)
+	user, token, err := auth.Authenticate(cfg, r.Context(), username, password)
 
 	if err != nil {
 		log.Printf("handlerLogin(): Error getting user: %v", err)
@@ -620,7 +648,7 @@ func handlerLogin(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, rendered)
 }
 
-func handlerMakePost(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerMakePost(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	boardPath := strings.TrimSuffix(r.PathValue("board"), "/")
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("location", r.URL.Path)
@@ -672,7 +700,7 @@ func handlerMakePost(user auth.AuthenticatedUser, w http.ResponseWriter, r *http
 	fmt.Fprint(w, rendered)
 }
 
-func handlerHomePage(user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
+func handlerHomePage(cfg config.Config, user auth.AuthenticatedUser, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 

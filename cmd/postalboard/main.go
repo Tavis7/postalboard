@@ -8,23 +8,48 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
 
 	_ "github.com/lib/pq"
 
+	"github.com/tavis7/postalboard/internal/config"
 	"github.com/tavis7/postalboard/internal/database"
 )
 
 var debugRedirect bool
 
-var dbQueries *database.Queries
+var cfg config.Config
 
 func main() {
 	godotenv.Load()
 
+	cfg.PasswordMinLength = 8
+	cfg.PasswordMaxLength = 1024
+
 	db_url := os.Getenv("DB_URL")
+	passwordMinLength := os.Getenv("MIN_PASSWORD_LENGTH")
+	passwordMaxLength := os.Getenv("MAX_PASSWORD_LENGTH")
+	if len(passwordMinLength) > 0 {
+		passwordMinLengthVal, err := strconv.ParseUint(passwordMinLength, 10, 31)
+		if err != nil {
+			log.Fatalf("Invalid MIN_PASSWORD_LENGTH: %v", passwordMinLength)
+		}
+		cfg.PasswordMinLength = int32(passwordMinLengthVal)
+	}
+	if len(passwordMaxLength) > 0 {
+		passwordMaxLengthVal, err := strconv.ParseUint(passwordMaxLength, 10, 31)
+		if err != nil {
+			log.Fatalf("Invalid MAX_PASSWORD_LENGTH: %v", passwordMaxLength)
+		}
+		cfg.PasswordMaxLength = int32(passwordMaxLengthVal)
+	}
+
+	if cfg.PasswordMaxLength < cfg.PasswordMinLength {
+		log.Fatalf("MAX_PASSWORD_LENGTH (%v) must not be less than MAX_PASSWORD_LENGTH (%v)", cfg.PasswordMaxLength, cfg.PasswordMinLength)
+	}
 
 	db, err := sql.Open("postgres", db_url)
 	if err != nil {
@@ -32,7 +57,7 @@ func main() {
 		log.Printf("Error opening database: %v", err)
 	}
 
-	dbQueries = database.New(db)
+	cfg.DbQueries = database.New(db)
 
 	debugRedirect = true
 	fmt.Println("Starting")
